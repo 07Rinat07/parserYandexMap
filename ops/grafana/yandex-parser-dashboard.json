@@ -1,0 +1,49 @@
+{
+  "title": "Yandex Parser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Queued Jobs",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "parser_jobs_queued" }]
+    },
+    {
+      "type": "stat",
+      "title": "Active Jobs",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "parser_jobs_active" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Completed vs Failed",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "increase(parser_jobs_completed_total[5m])", "legendFormat": "completed" },
+        { "expr": "increase(parser_jobs_failed_total[5m])", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue By Status",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "parser_jobs_persisted", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Average Duration",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [{ "expr": "parser_job_duration_seconds_avg" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Browser Recycling",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [{ "expr": "increase(parser_browser_recycled_total[5m])" }]
+    }
+  ]
+}

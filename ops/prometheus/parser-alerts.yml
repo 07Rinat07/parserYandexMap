@@ -1,0 +1,29 @@
+groups:
+  - name: yandex-parser
+    rules:
+      - alert: YandexParserQueueBacklog
+        expr: parser_jobs_queued > 25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Parser queue backlog is growing
+          description: "Parser queue has {{ $value }} waiting jobs for more than 10 minutes."
+
+      - alert: YandexParserHighFailureRate
+        expr: increase(parser_jobs_failed_total[15m]) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Yandex parser failure rate is high
+          description: "Parser reported more than 5 failures in the last 15 minutes."
+
+      - alert: YandexParserBrowserRecyclingSpike
+        expr: increase(parser_browser_recycled_total[30m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Parser browser recycling spike
+          description: "Browser instances are being recycled unusually often."

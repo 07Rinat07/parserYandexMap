@@ -66,6 +66,8 @@ services:
       - "3000:3000"
     volumes:
       - .:/var/www/html
+    depends_on:
+      - redis
 
   node:
     image: node:20-alpine

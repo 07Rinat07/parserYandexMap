@@ -49,6 +49,13 @@ export class PersistentQueue {
     return Array.from(this.jobs.values()).filter((job) => job.status === 'queued');
   }
 
+  nextQueued() {
+    const job = this.queued()[0];
+    if (!job) return null;
+
+    return this.markRunning(job.id);
+  }
+
   get(id) {
     return this.jobs.get(id) || null;
   }

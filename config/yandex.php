@@ -15,6 +15,10 @@ return [
         'telegram_bot_token' => env('YANDEX_ALERT_TELEGRAM_BOT_TOKEN'),
         'telegram_chat_id' => env('YANDEX_ALERT_TELEGRAM_CHAT_ID'),
     ],
+    'otel' => [
+        'endpoint' => env('OTEL_EXPORTER_OTLP_ENDPOINT'),
+        'service_name' => env('OTEL_SERVICE_NAME', 'yandex-reviews-laravel'),
+    ],
     'allowed_hosts' => array_values(array_filter(array_map(
         'trim',
         explode(',', env('YANDEX_ALLOWED_HOSTS', 'yandex.ru,www.yandex.ru,yandex.kz,www.yandex.kz,yandex.com,www.yandex.com,yandex.by,www.yandex.by'))

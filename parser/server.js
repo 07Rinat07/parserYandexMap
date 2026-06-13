@@ -2,12 +2,18 @@ import http from 'node:http';
 import { BrowserPool } from './browser-pool.js';
 import { parseYandexOrganization } from './parse-core.js';
 import { PersistentQueue } from './persistent-queue.js';
+import { RedisQueue } from './redis-queue.js';
 
 const port = Number(process.env.PARSER_PORT || 3000);
 const concurrency = Number(process.env.PARSER_CONCURRENCY || 2);
 const maxQueueSize = Number(process.env.PARSER_MAX_QUEUE_SIZE || 50);
 const syncWaitMs = Number(process.env.PARSER_SYNC_WAIT_MS || 180000);
-const queueStore = new PersistentQueue(process.env.PARSER_QUEUE_FILE);
+const queueStore = process.env.PARSER_QUEUE_DRIVER === 'redis'
+  ? new RedisQueue({
+    url: process.env.PARSER_REDIS_URL || process.env.REDIS_URL || 'redis://redis:6379',
+    prefix: process.env.PARSER_REDIS_PREFIX || 'yandex-parser'
+  })
+  : new PersistentQueue(process.env.PARSER_QUEUE_FILE);
 const pool = new BrowserPool({
   size: Number(process.env.PARSER_BROWSER_POOL_SIZE || concurrency),
   maxTasksPerBrowser: Number(process.env.PARSER_BROWSER_MAX_TASKS || 50),
@@ -94,20 +100,18 @@ function sendText(response, status, body) {
 }
 
 function queueDepth() {
-  return queueStore.counts().queued;
+  return metricsState.queued;
 }
 
-function drainQueue() {
+async function drainQueue() {
   while (active < concurrency) {
-    const job = queueStore.queued()[0];
+    const job = await queueStore.nextQueued();
     if (!job) return;
-    runJob(job.id);
+    runJob(job);
   }
 }
 
-function runJob(jobId) {
-  const job = queueStore.markRunning(jobId);
-  if (!job) return;
+function runJob(job) {
   active += 1;
 
   (async () => {
@@ -126,39 +130,48 @@ function runJob(jobId) {
       if (payload?.error) {
         jobFailed = true;
         failed += 1;
-        queueStore.markFailed(job.id, payload.error);
+        await queueStore.markFailed(job.id, payload.error);
       } else {
         completed += 1;
-        queueStore.markDone(job.id, payload);
+        await queueStore.markDone(job.id, payload);
       }
     } catch (error) {
       jobFailed = true;
       failed += 1;
-      queueStore.markFailed(job.id, { code: 'PARSER_FAILED', message: error.message || 'Parser failed.' });
+      await queueStore.markFailed(job.id, { code: 'PARSER_FAILED', message: error.message || 'Parser failed.' });
     } finally {
       const durationMs = Date.now() - started;
       totalDurationMs += durationMs;
       await exportOtelSpan({ job, durationMs, failed: jobFailed });
       await pool.release(entry, { failed: jobFailed });
       active -= 1;
-      drainQueue();
+      refreshMetrics().then(() => drainQueue());
     }
   })();
 }
 
-function enqueueParse(payload) {
+async function enqueueParse(payload) {
+  await refreshMetrics();
   if (queueDepth() >= maxQueueSize) {
     rejected += 1;
     return null;
   }
 
-  const job = queueStore.enqueue(payload);
+  const job = await queueStore.enqueue(payload);
+  await refreshMetrics();
   drainQueue();
   return job;
 }
 
-function metricsBody() {
-  const counts = queueStore.counts();
+let metricsState = { queued: 0, running: 0, done: 0, failed: 0 };
+
+async function refreshMetrics() {
+  metricsState = await queueStore.counts();
+  return metricsState;
+}
+
+async function metricsBody() {
+  const counts = await refreshMetrics();
   const avgDuration = completed + failed > 0 ? totalDurationMs / (completed + failed) / 1000 : 0;
 
   return [
@@ -196,7 +209,7 @@ async function handleParse(request, response, waitForResult) {
     return;
   }
 
-  const job = enqueueParse(payload);
+  const job = await enqueueParse(payload);
   if (!job) {
     send(response, 429, { error: { code: 'PARSER_QUEUE_FULL', message: 'Parser queue is full.' } });
     return;
@@ -209,7 +222,7 @@ async function handleParse(request, response, waitForResult) {
 
   const result = await queueStore.waitFor(job.id, syncWaitMs);
   if (!result || !['done', 'failed'].includes(result.status)) {
-    send(response, 202, { data: queueStore.get(job.id) }, { location: `/jobs/${job.id}` });
+    send(response, 202, { data: await queueStore.get(job.id) }, { location: `/jobs/${job.id}` });
     return;
   }
 
@@ -225,6 +238,7 @@ const server = http.createServer(async (request, response) => {
   const parsedUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
 
   if (request.method === 'GET' && parsedUrl.pathname === '/health') {
+    await refreshMetrics();
     send(response, 200, {
       status: 'ok',
       active,
@@ -240,7 +254,7 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === 'GET' && parsedUrl.pathname === '/metrics') {
-    sendText(response, 200, metricsBody());
+    sendText(response, 200, await metricsBody());
     return;
   }
 
@@ -264,7 +278,7 @@ const server = http.createServer(async (request, response) => {
 
   const jobMatch = parsedUrl.pathname.match(/^\/jobs\/([^/]+)$/);
   if (request.method === 'GET' && jobMatch) {
-    const job = queueStore.get(jobMatch[1]);
+    const job = await queueStore.get(jobMatch[1]);
     send(response, job ? 200 : 404, job ? { data: job } : { error: { code: 'NOT_FOUND', message: 'Job not found.' } });
     return;
   }
@@ -274,10 +288,11 @@ const server = http.createServer(async (request, response) => {
 
 process.on('SIGTERM', async () => {
   await pool.close();
+  await queueStore.close?.();
   process.exit(0);
 });
 
-drainQueue();
+refreshMetrics().then(() => drainQueue());
 
 server.listen(port, '0.0.0.0', () => {
   console.error(`Parser microservice listening on ${port} with concurrency=${concurrency}`);

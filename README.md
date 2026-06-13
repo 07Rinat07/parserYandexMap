@@ -116,6 +116,9 @@ PARSER_BROWSER_MAX_TASKS=50
 PARSER_BROWSER_MAX_ERRORS=5
 PARSER_MAX_QUEUE_SIZE=50
 PARSER_SYNC_WAIT_MS=180000
+PARSER_QUEUE_DRIVER=redis
+PARSER_REDIS_URL=redis://redis:6379
+PARSER_REDIS_PREFIX=yandex-parser
 PARSER_QUEUE_FILE=/var/www/html/storage/parser-queue.json
 OTEL_EXPORTER_OTLP_ENDPOINT=
 OTEL_SERVICE_NAME=yandex-parser-service
@@ -173,20 +176,24 @@ Laravel сохраняет `parser_confidence` и `parser_metadata` в `organiza
 
 ## Parser microservice queue и browser pool
 
-`parser/server.js` держит browser pool и persistent file-backed очередь задач:
+`parser/server.js` держит browser pool и persistent очередь задач:
 
 - `PARSER_BROWSER_POOL_SIZE` — количество заранее поднятых Chromium browser instances.
 - `PARSER_BROWSER_MAX_TASKS` — recycle browser instance после N задач.
 - `PARSER_BROWSER_MAX_ERRORS` — recycle browser instance после N ошибок.
 - `PARSER_CONCURRENCY` — сколько задач можно выполнять одновременно.
 - `PARSER_MAX_QUEUE_SIZE` — максимальная длина очереди до ответа `429 PARSER_QUEUE_FULL`.
-- `PARSER_QUEUE_FILE` — JSON-файл с persisted jobs; `running` jobs после рестарта возвращаются в `queued`.
+- `PARSER_QUEUE_DRIVER=redis` включает Redis-backed очередь для multi-replica parser service.
+- `PARSER_QUEUE_DRIVER=file` использует JSON-файл `PARSER_QUEUE_FILE` для локального dev; `running` jobs после рестарта возвращаются в `queued`.
+- `PARSER_REDIS_URL` и `PARSER_REDIS_PREFIX` задают Redis connection/prefix.
 - `POST /parse` сохраняет job и ждёт результат до `PARSER_SYNC_WAIT_MS`.
 - `POST /jobs` ставит async job и возвращает `202 Location: /jobs/{id}`.
 - `GET /jobs/{id}` возвращает persisted status/result/error.
 - `GET /health` показывает `active`, `queued`, `completed`, `failed`, `rejected`, `concurrency`, `pool_size`, `recycled_browsers`.
 - `GET /metrics` отдаёт Prometheus exposition format: counters/gauges по jobs, queue depth, recycle count и average duration.
 - `OTEL_EXPORTER_OTLP_ENDPOINT` включает OpenTelemetry OTLP/HTTP trace export для каждого parser job.
+
+Prometheus alert rules лежат в `ops/prometheus/parser-alerts.yml`, Grafana dashboard — в `ops/grafana/yandex-parser-dashboard.json`.
 
 Это дешевле и стабильнее, чем запускать отдельный Chromium/Node process на каждый HTTP-запрос, и позволяет переживать рестарт parser service без потери очереди.
 
@@ -277,6 +284,8 @@ PRODUCTION_HOST
 PRODUCTION_USER
 PRODUCTION_PATH
 PRODUCTION_HEALTHCHECK_URL
+PRODUCTION_CANARY_COMMAND
+PRODUCTION_CANARY_HEALTHCHECK_URL
 ```
 
 ## Что бы я улучшил при наличии большего времени
