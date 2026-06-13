@@ -382,6 +382,18 @@ p {
     font-size: 12px;
 }
 
+.chart-annotation-line {
+    stroke: #d89a2b;
+    stroke-dasharray: 4 4;
+    stroke-width: 1.5;
+}
+
+.chart-annotation-label {
+    fill: #8a6116;
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .review-item {
     border: 1px solid #e1e7ec;
     border-radius: 8px;

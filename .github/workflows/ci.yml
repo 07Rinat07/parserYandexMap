@@ -36,12 +36,14 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm --prefix parser ci
       - run: npm run test:frontend
       - run: npm run build
       - run: node --check parser/yandex-parser.js
       - run: node --check parser/server.js
       - run: node --check parser/parse-core.js
       - run: node --check parser/browser-pool.js
+      - run: node --check parser/persistent-queue.js
 
   deploy:
     runs-on: ubuntu-latest
@@ -60,17 +62,37 @@ jobs:
           DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST }}
           DEPLOY_USER: ${{ secrets.PRODUCTION_USER }}
           DEPLOY_PATH: ${{ secrets.PRODUCTION_PATH }}
+          HEALTHCHECK_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
         run: |
-          ssh -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" << EOF
+          REMOTE_URL="$(git config --get remote.origin.url)"
+          ssh -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' HEALTHCHECK_URL='$HEALTHCHECK_URL' GITHUB_SHA='$GITHUB_SHA' REMOTE_URL='$REMOTE_URL' bash -s" << 'EOF'
             set -e
-            cd "$DEPLOY_PATH"
+            RELEASE_ID="$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+            RELEASE_DIR="$DEPLOY_PATH/releases/$RELEASE_ID"
+            PREVIOUS_RELEASE="$(readlink -f "$DEPLOY_PATH/current" || true)"
+            mkdir -p "$DEPLOY_PATH/releases"
+            git clone --depth=1 --branch main "$REMOTE_URL" "$RELEASE_DIR"
+            cd "$RELEASE_DIR"
+            ln -sfn "$DEPLOY_PATH/shared/.env" .env
+            ln -sfn "$DEPLOY_PATH/shared/storage" storage
             git pull --ff-only origin main
             composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             npm ci
             npm run build
-            npm --prefix parser install
+            npm --prefix parser ci
             php artisan migrate --force
             php artisan config:cache
             php artisan route:cache
+            ln -sfn "$RELEASE_DIR" "$DEPLOY_PATH/current"
+            if [ -n "$HEALTHCHECK_URL" ]; then
+              curl --fail --max-time 20 "$HEALTHCHECK_URL" || {
+                if [ -n "$PREVIOUS_RELEASE" ]; then
+                  ln -sfn "$PREVIOUS_RELEASE" "$DEPLOY_PATH/current"
+                fi
+                exit 1
+              }
+            fi
             php artisan queue:restart
+            find "$DEPLOY_PATH/releases" -mindepth 1 -maxdepth 1 -type d | sort | head -n -5 | xargs -r rm -rf
           EOF

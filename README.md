@@ -112,7 +112,13 @@ YANDEX_ALERT_TELEGRAM_CHAT_ID=
 PARSER_PORT=3000
 PARSER_CONCURRENCY=2
 PARSER_BROWSER_POOL_SIZE=2
+PARSER_BROWSER_MAX_TASKS=50
+PARSER_BROWSER_MAX_ERRORS=5
 PARSER_MAX_QUEUE_SIZE=50
+PARSER_SYNC_WAIT_MS=180000
+PARSER_QUEUE_FILE=/var/www/html/storage/parser-queue.json
+OTEL_EXPORTER_OTLP_ENDPOINT=
+OTEL_SERVICE_NAME=yandex-parser-service
 YANDEX_ALLOWED_HOSTS=yandex.ru,www.yandex.ru,yandex.kz,www.yandex.kz,yandex.com,www.yandex.com,yandex.by,www.yandex.by
 YANDEX_MINIMUM_PARSER_CONFIDENCE=30
 ```
@@ -167,14 +173,22 @@ Laravel сохраняет `parser_confidence` и `parser_metadata` в `organiza
 
 ## Parser microservice queue и browser pool
 
-`parser/server.js` держит browser pool и in-memory очередь задач:
+`parser/server.js` держит browser pool и persistent file-backed очередь задач:
 
 - `PARSER_BROWSER_POOL_SIZE` — количество заранее поднятых Chromium browser instances.
+- `PARSER_BROWSER_MAX_TASKS` — recycle browser instance после N задач.
+- `PARSER_BROWSER_MAX_ERRORS` — recycle browser instance после N ошибок.
 - `PARSER_CONCURRENCY` — сколько задач можно выполнять одновременно.
 - `PARSER_MAX_QUEUE_SIZE` — максимальная длина очереди до ответа `429 PARSER_QUEUE_FULL`.
-- `GET /health` показывает `active`, `queued`, `completed`, `failed`, `concurrency`, `pool_size`.
+- `PARSER_QUEUE_FILE` — JSON-файл с persisted jobs; `running` jobs после рестарта возвращаются в `queued`.
+- `POST /parse` сохраняет job и ждёт результат до `PARSER_SYNC_WAIT_MS`.
+- `POST /jobs` ставит async job и возвращает `202 Location: /jobs/{id}`.
+- `GET /jobs/{id}` возвращает persisted status/result/error.
+- `GET /health` показывает `active`, `queued`, `completed`, `failed`, `rejected`, `concurrency`, `pool_size`, `recycled_browsers`.
+- `GET /metrics` отдаёт Prometheus exposition format: counters/gauges по jobs, queue depth, recycle count и average duration.
+- `OTEL_EXPORTER_OTLP_ENDPOINT` включает OpenTelemetry OTLP/HTTP trace export для каждого parser job.
 
-Это дешевле и стабильнее, чем запускать отдельный Chromium/Node process на каждый HTTP-запрос.
+Это дешевле и стабильнее, чем запускать отдельный Chromium/Node process на каждый HTTP-запрос, и позволяет переживать рестарт parser service без потери очереди.
 
 Парсер не использует аккаунты, внешние cookies, proxy rotation и не пытается решать капчу. Если Яндекс показывает проверку, меняет разметку или данные недоступны, job переводит организацию в `failed` и сохраняет безопасное сообщение.
 
@@ -223,6 +237,7 @@ node --check parser/yandex-parser.js
 node --check parser/server.js
 node --check parser/parse-core.js
 node --check parser/browser-pool.js
+node --check parser/persistent-queue.js
 ```
 
 Текущее покрытие включает auth/API, несколько организаций, scoped reviews, rating history, parser monitoring, URL validation, DTO, fingerprint, fake parser persistence/deduplication, wrapper errors и базовые Vue-компоненты.
@@ -252,7 +267,7 @@ node --check parser/browser-pool.js
 - Composer install и `php artisan test`.
 - npm install, `npm run test:frontend`, `npm run build`.
 - syntax check parser scripts.
-- deploy job на `main` после успешных checks.
+- blue-green deploy job на `main` после успешных checks: новый release собирается в `releases/{timestamp-sha}`, затем атомарно переключается `current`; при failed healthcheck выполняется rollback на предыдущий symlink.
 
 Для deploy job нужны GitHub Secrets:
 
@@ -261,12 +276,12 @@ PRODUCTION_SSH_KEY
 PRODUCTION_HOST
 PRODUCTION_USER
 PRODUCTION_PATH
+PRODUCTION_HEALTHCHECK_URL
 ```
 
 ## Что бы я улучшил при наличии большего времени
 
-- Persistent queue для parser microservice вместо in-memory очереди.
-- Browser recycling policy после N задач или ошибок.
-- Метрики Prometheus/OpenTelemetry.
-- Визуальные annotations на графике рейтинга.
-- Blue-green deploy.
+- Redis-backed очередь parser-а вместо file-backed JSON для multi-replica parser service.
+- OpenTelemetry traces вокруг Laravel job и parser microservice.
+- Prometheus alert rules и Grafana dashboard.
+- Canary deploy перед blue-green switch.

@@ -18,6 +18,11 @@
                     <circle :cx="point.x" :cy="point.y" r="4" class="chart-point" />
                     <title>{{ point.label }}</title>
                 </g>
+                <g v-for="annotation in annotations" :key="annotation.id">
+                    <line :x1="annotation.x" y1="24" :x2="annotation.x" y2="150" class="chart-annotation-line" />
+                    <text :x="annotation.x + 6" y="36" class="chart-annotation-label">{{ annotation.label }}</text>
+                    <title>{{ annotation.title }}</title>
+                </g>
                 <text x="8" y="25" class="chart-label">5</text>
                 <text x="8" y="153" class="chart-label">1</text>
             </svg>
@@ -62,6 +67,38 @@ const points = computed(() => {
     });
 });
 const linePoints = computed(() => points.value.map((point) => `${point.x},${point.y}`).join(' '));
+const annotations = computed(() => chronological.value
+    .map((snapshot, index, rows) => {
+        if (index === 0) {
+            return null;
+        }
+
+        const previous = rows[index - 1];
+        const point = points.value[index];
+        const ratingDelta = Number((snapshot.rating - previous.rating).toFixed(2));
+        const reviewDelta = (snapshot.reviews_count || 0) - (previous.reviews_count || 0);
+
+        if (Math.abs(ratingDelta) >= 0.1) {
+            return {
+                id: `rating-${snapshot.id}`,
+                x: point.x,
+                label: ratingDelta > 0 ? `+${ratingDelta}` : String(ratingDelta),
+                title: `Изменение рейтинга: ${ratingDelta}`,
+            };
+        }
+
+        if (reviewDelta >= 25) {
+            return {
+                id: `reviews-${snapshot.id}`,
+                x: point.x,
+                label: `+${reviewDelta} отзывов`,
+                title: `Прирост отзывов: ${reviewDelta}`,
+            };
+        }
+
+        return null;
+    })
+    .filter(Boolean));
 
 function formatDate(value) {
     if (!value) {
