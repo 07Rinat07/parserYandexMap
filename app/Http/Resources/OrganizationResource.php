@@ -19,6 +19,8 @@ class OrganizationResource extends JsonResource
             'reviews_count' => $this->reviews_count,
             'parsing_status' => $this->parsing_status?->value ?? $this->parsing_status,
             'parsing_error' => $this->parsing_error,
+            'parser_confidence' => $this->parser_confidence,
+            'parser_metadata' => $this->parser_metadata,
             'last_parsed_at' => $this->last_parsed_at?->toIso8601String(),
         ];
     }

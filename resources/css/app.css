@@ -167,7 +167,7 @@ p {
 .metrics {
     display: grid;
     gap: 12px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .metrics div {
@@ -216,6 +216,29 @@ p {
 .status-failed {
     background: #fdecec;
     color: #991b1b;
+}
+
+.parser-warnings {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.parser-warnings strong {
+    color: #52616f;
+    font-size: 14px;
+}
+
+.parser-warnings span {
+    background: #fff7e6;
+    border: 1px solid #ffd38a;
+    border-radius: 999px;
+    color: #8a6116;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 5px 9px;
 }
 
 .state {

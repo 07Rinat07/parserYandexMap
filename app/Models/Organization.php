@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany as HasManyRelation;
     'reviews_count',
     'parsing_status',
     'parsing_error',
+    'parser_confidence',
+    'parser_metadata',
     'last_parsed_at',
 ])]
 class Organization extends Model
@@ -30,6 +32,8 @@ class Organization extends Model
             'ratings_count' => 'integer',
             'reviews_count' => 'integer',
             'parsing_status' => ParsingStatus::class,
+            'parser_confidence' => 'integer',
+            'parser_metadata' => 'array',
             'last_parsed_at' => 'immutable_datetime',
         ];
     }

@@ -2,11 +2,15 @@
 
 namespace Tests\Unit;
 
+use App\Actions\Organization\PersistParsedOrganizationAction;
 use App\DTO\ParsedOrganizationData;
 use App\DTO\ParsedReviewData;
+use App\Enums\ParsingStatus;
 use App\Exceptions\InvalidYandexMapsUrlException;
 use App\Exceptions\YandexParserTimeoutException;
 use App\Exceptions\YandexParsingException;
+use App\Models\Organization;
+use App\Models\User;
 use App\Services\Yandex\PlaywrightYandexOrganizationParser;
 use App\Services\Yandex\ReviewFingerprintGenerator;
 use App\Services\Yandex\YandexMapsUrlNormalizer;
@@ -73,10 +77,43 @@ class YandexSupportTest extends TestCase
     public function test_dto_creation_handles_empty_fields(): void
     {
         $review = ParsedReviewData::fromArray(['rating' => 9]);
-        $organization = ParsedOrganizationData::fromArray(['reviews' => [[]]]);
+        $organization = ParsedOrganizationData::fromArray([
+            'reviews' => [[]],
+            'parser' => [
+                'confidence' => 82,
+                'warnings' => ['missing_title'],
+            ],
+        ]);
 
         $this->assertSame(5, $review->rating);
         $this->assertCount(1, $organization->reviews);
+        $this->assertSame(82, $organization->parserConfidence);
+        $this->assertSame(['missing_title'], $organization->parserMetadata['warnings']);
+    }
+
+    public function test_low_parser_confidence_is_rejected_before_persisting(): void
+    {
+        config(['yandex.minimum_parser_confidence' => 50]);
+        $user = User::factory()->create();
+        $organization = Organization::query()->create([
+            'user_id' => $user->id,
+            'yandex_url' => 'https://yandex.ru/maps/org/test',
+            'normalized_yandex_url' => 'https://yandex.ru/maps/org/test',
+            'parsing_status' => ParsingStatus::Processing,
+        ]);
+        $data = ParsedOrganizationData::fromArray([
+            'rating' => 4.2,
+            'reviews_count' => 10,
+            'reviews' => [],
+            'parser' => [
+                'confidence' => 20,
+                'warnings' => ['missing_reviews'],
+            ],
+        ]);
+
+        $this->expectException(YandexParsingException::class);
+
+        app(PersistParsedOrganizationAction::class)->execute($organization, $data);
     }
 
     public function test_playwright_wrapper_rejects_invalid_json(): void

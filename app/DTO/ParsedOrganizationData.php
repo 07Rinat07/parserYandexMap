@@ -16,6 +16,8 @@ final readonly class ParsedOrganizationData
         public ?int $reviewsCount,
         public Collection $reviews,
         public ?string $yandexBusinessId = null,
+        public ?int $parserConfidence = null,
+        public ?array $parserMetadata = null,
     ) {}
 
     public static function fromArray(array $payload): self
@@ -32,6 +34,8 @@ final readonly class ParsedOrganizationData
             reviewsCount: isset($payload['reviews_count']) ? max(0, (int) $payload['reviews_count']) : $reviews->count(),
             reviews: $reviews,
             yandexBusinessId: self::nullableString($payload['yandex_business_id'] ?? null),
+            parserConfidence: isset($payload['parser']['confidence']) ? max(0, min(100, (int) $payload['parser']['confidence'])) : null,
+            parserMetadata: isset($payload['parser']) && is_array($payload['parser']) ? $payload['parser'] : null,
         );
     }
 

@@ -1,4 +1,4 @@
-import { expansionLabels, moreReviewsLabels, reviewSelectors } from './extraction.js';
+import { expansionLabels, fieldSelectorProfiles, moreReviewsLabels, parserContractVersion, reviewSelectors } from './extraction.js';
 
 export function withReviewsTab(rawUrl) {
   const parsed = new URL(rawUrl);
@@ -157,12 +157,17 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
     await page.waitForTimeout(1500);
     await scrollReviews(page, startedAt, timeoutMs, maxReviews);
 
-    const data = await page.evaluate(({ reviewSelectors, maxReviews }) => {
+    const data = await page.evaluate(({ fieldSelectorProfiles, parserContractVersion, reviewSelectors, maxReviews }) => {
+      const selectorHits = {};
+
       function textOf(root, selectors) {
         for (const selector of selectors) {
           const element = root.querySelector(selector);
           const value = element?.textContent?.replace(/\s+/g, ' ').trim();
-          if (value) return value;
+          if (value) {
+            selectorHits[selector] = (selectorHits[selector] || 0) + 1;
+            return value;
+          }
         }
         return null;
       }
@@ -213,40 +218,13 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
         })
         .slice(0, maxReviews);
 
-      const title = textOf(document, [
-        'h1',
-        '[class*="orgpage-header-view__header"]',
-        '[class*="business-card-title-view__title"]'
-      ]);
-      const ratingText = textOf(document, [
-        '[class*="business-rating-badge-view__rating"]',
-        '[class*="business-summary-rating-badge-view__rating"]',
-        '[class*="orgpage-header-view__rating"]',
-        '[aria-label*="рейтинг"]',
-        '[aria-label*="Рейтинг"]'
-      ]);
+      const title = textOf(document, fieldSelectorProfiles.title);
+      const ratingText = textOf(document, fieldSelectorProfiles.rating);
 
       const reviews = reviewNodes.map((node, index) => {
-        const author = textOf(node, [
-          '[class*="business-review-view__author"]',
-          '[class*="business-review-view__author-name"]',
-          '[class*="review-snippet-view__name"]',
-          '[class*="author"]'
-        ]);
-        const date = textOf(node, [
-          'time',
-          '[datetime]',
-          '[class*="business-review-view__date"]',
-          '[class*="review-snippet-view__date"]',
-          '[class*="date"]'
-        ]);
-        const text = textOf(node, [
-          '[class*="business-review-view__body"]',
-          '[class*="business-review-view__text"]',
-          '[class*="review-snippet-view__text"]',
-          '[class*="spoiler-view__text"]',
-          '[class*="text"]'
-        ]);
+        const author = textOf(node, fieldSelectorProfiles.author);
+        const date = textOf(node, fieldSelectorProfiles.reviewDate);
+        const text = textOf(node, fieldSelectorProfiles.reviewText);
         const datetime = node.querySelector('time')?.getAttribute('datetime')
           || node.querySelector('[datetime]')?.getAttribute('datetime')
           || null;
@@ -266,14 +244,39 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
         };
       }).filter((review) => review.author_name || review.text);
 
+      const warnings = [];
+      if (!title) warnings.push('missing_title');
+      if (!parseRating(ratingText)) warnings.push('missing_rating');
+      if (!parseHumanCount(reviewsMatch?.[1] || null)) warnings.push('missing_reviews_count');
+      if (!parseHumanCount(ratingsMatch?.[1] || null)) warnings.push('missing_ratings_count');
+      if (reviews.length === 0) warnings.push('missing_reviews');
+      if (reviews.length > 0 && reviews.filter((review) => review.rating).length / reviews.length < 0.5) warnings.push('low_review_rating_coverage');
+      if (reviews.length > 0 && reviews.filter((review) => review.text).length / reviews.length < 0.5) warnings.push('low_review_text_coverage');
+
+      let confidence = 100;
+      confidence -= warnings.length * 12;
+      if (reviews.length > 0) confidence += 10;
+      confidence = Math.max(0, Math.min(100, confidence));
+
       return {
         name: title,
         rating: parseRating(ratingText),
         ratings_count: parseHumanCount(ratingsMatch?.[1] || null),
         reviews_count: parseHumanCount(reviewsMatch?.[1] || null) || reviews.length,
-        reviews
+        reviews,
+        parser: {
+          contract_version: parserContractVersion,
+          strategy: 'dom_headless_scroll',
+          confidence,
+          warnings,
+          diagnostics: {
+            review_nodes_seen: reviewNodes.length,
+            selector_hits: selectorHits,
+            body_text_length: body.length
+          }
+        }
       };
-    }, { reviewSelectors, maxReviews });
+    }, { fieldSelectorProfiles, parserContractVersion, reviewSelectors, maxReviews });
 
     const normalizedReviews = data.reviews.map((review) => ({
       ...review,
@@ -283,7 +286,18 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
         normalized_date_from_label: review.review_date ? null : normalizeReviewDate(review.review_date_label)
       }
     }));
-    const result = { ...data, reviews: normalizedReviews };
+    const result = {
+      ...data,
+      reviews: normalizedReviews,
+      parser: {
+        ...(data.parser || {}),
+        diagnostics: {
+          ...(data.parser?.diagnostics || {}),
+          normalized_dates: normalizedReviews.filter((review) => review.raw_payload?.normalized_date_from_label).length,
+          elapsed_ms: Date.now() - startedAt
+        }
+      }
+    };
 
     if (!result.reviews.length && !result.rating && !result.reviews_count) {
       return { error: { code: 'YANDEX_PARSING_FAILED', message: 'Unable to extract organization reviews from Yandex Maps.' } };

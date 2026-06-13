@@ -29,6 +29,15 @@
                 <span>Обновлено</span>
                 <strong>{{ lastParsed }}</strong>
             </div>
+            <div>
+                <span>Parser confidence</span>
+                <strong>{{ organization.parser_confidence ?? '-' }}</strong>
+            </div>
+        </div>
+
+        <div v-if="warnings.length" class="parser-warnings">
+            <strong>Parser warnings</strong>
+            <span v-for="warning in warnings" :key="warning">{{ warning }}</span>
         </div>
 
         <ErrorState v-if="organization.parsing_error" :message="organization.parsing_error" />
@@ -57,4 +66,6 @@ const lastParsed = computed(() => {
         timeStyle: 'short',
     }).format(new Date(props.organization.last_parsed_at));
 });
+
+const warnings = computed(() => props.organization.parser_metadata?.warnings || []);
 </script>
