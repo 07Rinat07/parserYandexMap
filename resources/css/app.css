@@ -328,6 +328,37 @@ p {
     font-size: 14px;
 }
 
+.rating-chart {
+    height: auto;
+    margin-top: 12px;
+    max-height: 220px;
+    width: 100%;
+}
+
+.chart-axis {
+    stroke: #cfd7df;
+    stroke-width: 1.5;
+}
+
+.chart-line {
+    fill: none;
+    stroke: #1f6f5b;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 3;
+}
+
+.chart-point {
+    fill: #fff;
+    stroke: #1f6f5b;
+    stroke-width: 3;
+}
+
+.chart-label {
+    fill: #677788;
+    font-size: 12px;
+}
+
 .review-item {
     border: 1px solid #e1e7ec;
     border-radius: 8px;

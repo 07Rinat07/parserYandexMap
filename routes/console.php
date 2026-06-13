@@ -12,3 +12,8 @@ Schedule::command('yandex:refresh-organizations')
     ->cron(config('yandex.scheduled_refresh'))
     ->withoutOverlapping()
     ->onOneServer();
+
+Schedule::command('yandex:alert-parser-failures')
+    ->cron(config('yandex.alert_schedule'))
+    ->withoutOverlapping()
+    ->onOneServer();
