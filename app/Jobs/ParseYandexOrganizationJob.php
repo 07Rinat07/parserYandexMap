@@ -44,16 +44,25 @@ class ParseYandexOrganizationJob implements ShouldQueue
             $data = $parser->parse($organization->normalized_yandex_url);
             $persist->execute($organization, $data);
         } catch (Throwable $exception) {
-            Log::warning('Yandex organization parsing failed.', [
-                'organization_id' => $organization->id,
-                'exception' => $exception::class,
-                'message' => $exception->getMessage(),
-            ]);
+            if ($this->job && $this->attempts() < $this->tries) {
+                throw $exception;
+            }
 
-            $organization->update([
-                'parsing_status' => ParsingStatus::Failed,
-                'parsing_error' => mb_substr($exception->getMessage() ?: 'Не удалось получить данные Яндекс.Карт.', 0, 500),
-            ]);
+            $this->markAsFailed($organization, $exception);
         }
+    }
+
+    private function markAsFailed(Organization $organization, Throwable $exception): void
+    {
+        Log::warning('Yandex organization parsing failed.', [
+            'organization_id' => $organization->id,
+            'exception' => $exception::class,
+            'message' => $exception->getMessage(),
+        ]);
+
+        $organization->update([
+            'parsing_status' => ParsingStatus::Failed,
+            'parsing_error' => mb_substr($exception->getMessage() ?: 'Не удалось получить данные Яндекс.Карт.', 0, 500),
+        ]);
     }
 }

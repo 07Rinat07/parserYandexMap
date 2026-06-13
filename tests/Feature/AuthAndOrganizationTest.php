@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Organization\PersistParsedOrganizationAction;
+use App\DTO\ParsedOrganizationData;
 use App\Enums\ParsingStatus;
 use App\Jobs\ParseYandexOrganizationJob;
 use App\Models\Organization;
@@ -12,6 +13,7 @@ use App\Services\Yandex\YandexOrganizationParserInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
+use RuntimeException;
 use Tests\TestCase;
 
 class AuthAndOrganizationTest extends TestCase
@@ -154,6 +156,28 @@ class AuthAndOrganizationTest extends TestCase
         $this->assertSame(ParsingStatus::Success, $organization->parsing_status);
         $this->assertSame(3, $organization->reviews()->count());
         $this->assertSame(4.7, $organization->rating);
+    }
+
+    public function test_parser_error_marks_organization_as_failed(): void
+    {
+        $organization = $this->organizationFor($this->seedUser());
+
+        $this->app->bind(YandexOrganizationParserInterface::class, fn () => new class implements YandexOrganizationParserInterface
+        {
+            public function parse(string $normalizedUrl): ParsedOrganizationData
+            {
+                throw new RuntimeException('Parser unavailable.');
+            }
+        });
+
+        (new ParseYandexOrganizationJob($organization->id))->handle(
+            app(YandexOrganizationParserInterface::class),
+            app(PersistParsedOrganizationAction::class),
+        );
+
+        $organization->refresh();
+        $this->assertSame(ParsingStatus::Failed, $organization->parsing_status);
+        $this->assertSame('Parser unavailable.', $organization->parsing_error);
     }
 
     private function seedUser(): User

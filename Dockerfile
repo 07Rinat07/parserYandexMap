@@ -13,6 +13,7 @@ COPY . .
 
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader \
     && npm install \
+    && npm --prefix parser install \
     && npm run build
 
 CMD ["php-fpm"]
