@@ -1,0 +1,314 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #f6f7f9;
+    color: #1f2933;
+    font-family: var(--font-sans);
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    align-items: center;
+    background: #1f6f5b;
+    border: 0;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 16px;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
+input {
+    background: #fff;
+    border: 1px solid #cfd7df;
+    border-radius: 8px;
+    color: #1f2933;
+    min-height: 42px;
+    padding: 0 12px;
+    width: 100%;
+}
+
+label {
+    color: #52616f;
+    display: grid;
+    font-size: 14px;
+    gap: 8px;
+}
+
+h1,
+h2,
+p {
+    margin: 0;
+}
+
+.auth-shell {
+    align-items: center;
+    display: grid;
+    min-height: 100vh;
+    padding: 24px;
+}
+
+.auth-card,
+.panel {
+    background: #fff;
+    border: 1px solid #d9e1e8;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(31, 41, 51, .06);
+}
+
+.auth-card {
+    display: grid;
+    gap: 24px;
+    margin: 0 auto;
+    max-width: 420px;
+    padding: 28px;
+    width: 100%;
+}
+
+.auth-card form {
+    display: grid;
+    gap: 16px;
+}
+
+.app-shell {
+    display: grid;
+    gap: 18px;
+    margin: 0 auto;
+    max-width: 1120px;
+    padding: 28px 20px 48px;
+}
+
+.topbar,
+.summary-header,
+.table-header,
+.actions-row,
+.input-row,
+.pagination {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+}
+
+.topbar,
+.summary-header,
+.table-header,
+.actions-row {
+    justify-content: space-between;
+}
+
+.topbar h1,
+.auth-card h1 {
+    font-size: 30px;
+    line-height: 1.15;
+}
+
+.panel {
+    padding: 20px;
+}
+
+.form-panel {
+    display: grid;
+    gap: 10px;
+}
+
+.input-row {
+    align-items: stretch;
+}
+
+.input-row input {
+    flex: 1;
+}
+
+.ghost-button {
+    background: #e8eef2;
+    color: #1f2933;
+}
+
+.eyebrow {
+    color: #677788;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.source-link {
+    color: #1f6f5b;
+    display: block;
+    margin: 14px 0;
+    overflow-wrap: anywhere;
+}
+
+.metrics {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metrics div {
+    background: #f6f7f9;
+    border: 1px solid #e1e7ec;
+    border-radius: 8px;
+    display: grid;
+    gap: 6px;
+    min-height: 82px;
+    padding: 14px;
+}
+
+.metrics span,
+.muted {
+    color: #677788;
+    font-size: 14px;
+}
+
+.metrics strong {
+    font-size: 22px;
+}
+
+.status-badge {
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 7px 11px;
+    white-space: nowrap;
+}
+
+.status-pending {
+    background: #eef2f7;
+    color: #475569;
+}
+
+.status-processing {
+    background: #e6f4ff;
+    color: #075985;
+}
+
+.status-success {
+    background: #e7f7ee;
+    color: #166534;
+}
+
+.status-failed {
+    background: #fdecec;
+    color: #991b1b;
+}
+
+.state {
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.state-loading,
+.state-empty {
+    background: #eef2f7;
+    color: #52616f;
+}
+
+.state-error,
+.field-error {
+    background: #fdecec;
+    color: #991b1b;
+}
+
+.field-error {
+    border-radius: 8px;
+    font-size: 14px;
+    padding: 10px 12px;
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+    border: 2px solid #b8c4ce;
+    border-top-color: #1f6f5b;
+    border-radius: 50%;
+    display: inline-block;
+    height: 18px;
+    width: 18px;
+}
+
+.reviews-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.review-item {
+    border: 1px solid #e1e7ec;
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+}
+
+.review-item header,
+.rating {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.review-item header span {
+    color: #677788;
+    font-size: 14px;
+}
+
+.rating {
+    color: #8a6116;
+    justify-content: flex-start;
+}
+
+.pagination {
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 760px) {
+    .topbar,
+    .summary-header,
+    .actions-row,
+    .input-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    button {
+        justify-content: center;
+        width: 100%;
+    }
+}
