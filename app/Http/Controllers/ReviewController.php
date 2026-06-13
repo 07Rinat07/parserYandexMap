@@ -16,6 +16,18 @@ class ReviewController extends Controller
             ->latest('updated_at')
             ->firstOrFail();
 
+        return $this->reviewsResponse($request, $organization);
+    }
+
+    public function indexForOrganization(ReviewIndexRequest $request, Organization $organization): JsonResponse
+    {
+        abort_unless($organization->user_id === $request->user()->id, 404);
+
+        return $this->reviewsResponse($request, $organization);
+    }
+
+    private function reviewsResponse(ReviewIndexRequest $request, Organization $organization): JsonResponse
+    {
         $reviews = $organization->reviews()
             ->orderByRaw('review_date IS NULL')
             ->orderByDesc('review_date')

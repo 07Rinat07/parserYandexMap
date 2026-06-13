@@ -43,4 +43,9 @@ class Organization extends Model
     {
         return $this->hasMany(Review::class);
     }
+
+    public function ratingSnapshots(): HasManyRelation
+    {
+        return $this->hasMany(RatingSnapshot::class);
+    }
 }

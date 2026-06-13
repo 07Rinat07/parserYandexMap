@@ -46,6 +46,27 @@ services:
       - redis
       - db
 
+  scheduler:
+    build: .
+    command: sh -c "while true; do php artisan schedule:run --no-interaction; sleep 60; done"
+    env_file: .env
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - app
+      - redis
+      - db
+
+  parser:
+    build: .
+    working_dir: /var/www/html/parser
+    command: npm run serve
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/var/www/html
+
   node:
     image: node:20-alpine
     working_dir: /var/www/html

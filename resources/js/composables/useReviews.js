@@ -7,11 +7,11 @@ export function useReviews() {
     const loading = ref(false);
     const error = ref('');
 
-    async function load(page = 1) {
+    async function load(page = 1, organizationId = null) {
         loading.value = true;
         error.value = '';
         try {
-            const response = await getReviews(page, meta.value.per_page);
+            const response = await getReviews(page, meta.value.per_page, organizationId);
             reviews.value = response.data;
             meta.value = response.meta;
         } catch (exception) {

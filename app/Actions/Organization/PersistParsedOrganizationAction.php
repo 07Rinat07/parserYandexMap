@@ -26,6 +26,13 @@ final readonly class PersistParsedOrganizationAction
                 'last_parsed_at' => now(),
             ]);
 
+            $organization->ratingSnapshots()->create([
+                'rating' => $data->rating,
+                'ratings_count' => $data->ratingsCount,
+                'reviews_count' => $data->reviewsCount,
+                'captured_at' => now(),
+            ]);
+
             foreach ($data->reviews as $review) {
                 $fingerprint = $this->fingerprints->generate($review);
                 $attributes = $review->externalId

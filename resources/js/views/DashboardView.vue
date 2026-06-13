@@ -19,9 +19,21 @@
 
         <ErrorState v-if="error" :message="error" />
         <LoadingState v-if="loading" label="Загружаем настройки..." />
-        <EmptyState v-else-if="!organization" message="Добавьте ссылку на организацию, чтобы запустить первый сбор отзывов." />
 
-        <template v-else>
+        <OrganizationsList
+            :organizations="organizations"
+            :active-id="organization?.id"
+            @select="handleSelect"
+        />
+
+        <ParserMonitoring
+            :monitoring="monitoring"
+            @retry="handleRetry"
+        />
+
+        <EmptyState v-if="!loading && !organization" message="Добавьте ссылку на организацию, чтобы запустить первый сбор отзывов." />
+
+        <template v-if="organization">
             <OrganizationSummary :organization="organization" />
 
             <div class="actions-row">
@@ -38,8 +50,10 @@
                 :meta="meta"
                 :loading="reviewsLoading"
                 :error="reviewsError"
-                @page-change="loadReviews"
+                @page-change="handlePageChange"
             />
+
+            <RatingHistory :history="ratingHistory" />
         </template>
     </main>
 </template>
@@ -52,7 +66,10 @@ import EmptyState from '../components/EmptyState.vue';
 import ErrorState from '../components/ErrorState.vue';
 import LoadingState from '../components/LoadingState.vue';
 import OrganizationForm from '../components/OrganizationForm.vue';
+import OrganizationsList from '../components/OrganizationsList.vue';
 import OrganizationSummary from '../components/OrganizationSummary.vue';
+import ParserMonitoring from '../components/ParserMonitoring.vue';
+import RatingHistory from '../components/RatingHistory.vue';
 import ReviewsTable from '../components/ReviewsTable.vue';
 import { useOrganization } from '../composables/useOrganization';
 import { usePolling } from '../composables/usePolling';
@@ -61,18 +78,42 @@ import { useAuthStore } from '../stores/auth';
 
 const router = useRouter();
 const auth = useAuthStore();
-const { organization, loading, saving, refreshing, error, load, save, refresh } = useOrganization();
+const {
+    organization,
+    organizations,
+    ratingHistory,
+    monitoring,
+    loading,
+    saving,
+    refreshing,
+    error,
+    load,
+    loadAll,
+    select,
+    save,
+    refresh,
+    loadHistory,
+    loadMonitoring,
+} = useOrganization();
 const { reviews, meta, loading: reviewsLoading, error: reviewsError, load: loadReviews } = useReviews();
 
 const isProcessing = computed(() => ['pending', 'processing'].includes(organization.value?.parsing_status));
 const polling = usePolling(async () => {
-    await load();
+    if (organization.value?.id) {
+        await select(organization.value.id);
+    } else {
+        await load();
+    }
+    await loadAll();
+    await loadMonitoring();
 }, 4000);
 
 onMounted(async () => {
-    await load();
+    await loadAll();
+    await loadMonitoring();
     if (organization.value?.parsing_status === 'success') {
-        await loadReviews(1);
+        await loadReviews(1, organization.value.id);
+        await loadHistory(organization.value.id);
     }
 });
 
@@ -86,7 +127,8 @@ watch(isProcessing, (value) => {
 
 watch(() => organization.value?.parsing_status, async (status, previous) => {
     if (status === 'success' && previous !== 'success') {
-        await loadReviews(1);
+        await loadReviews(1, organization.value.id);
+        await loadHistory(organization.value.id);
     }
 });
 
@@ -94,10 +136,32 @@ async function handleSave(url) {
     await save(url);
     reviews.value = [];
     meta.value = { current_page: 1, per_page: 50, total: 0, last_page: 1 };
+    await loadMonitoring();
 }
 
 async function handleRefresh() {
-    await refresh();
+    await refresh(organization.value?.id);
+    await loadMonitoring();
+}
+
+async function handleRetry(id) {
+    await refresh(id);
+    await loadMonitoring();
+}
+
+async function handleSelect(id) {
+    await select(id);
+    reviews.value = [];
+    meta.value = { current_page: 1, per_page: 50, total: 0, last_page: 1 };
+
+    if (organization.value?.parsing_status === 'success') {
+        await loadReviews(1, organization.value.id);
+        await loadHistory(organization.value.id);
+    }
+}
+
+async function handlePageChange(page) {
+    await loadReviews(page, organization.value?.id);
 }
 
 async function signOut() {

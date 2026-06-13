@@ -130,6 +130,35 @@ class AuthAndOrganizationTest extends TestCase
             ->assertJsonPath('meta.total', 1);
     }
 
+    public function test_user_can_list_multiple_organizations_and_get_scoped_reviews(): void
+    {
+        $user = $this->seedUser();
+        $first = $this->organizationFor($user, 'https://yandex.ru/maps/org/first');
+        $second = $this->organizationFor($user, 'https://yandex.ru/maps/org/second');
+
+        Review::query()->create([
+            'organization_id' => $first->id,
+            'fingerprint' => 'first-review',
+            'author_name' => 'First',
+            'text' => 'First organization review',
+        ]);
+        Review::query()->create([
+            'organization_id' => $second->id,
+            'fingerprint' => 'second-review',
+            'author_name' => 'Second',
+            'text' => 'Second organization review',
+        ]);
+
+        $this->actingAs($user)->getJson('/api/organizations')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $this->actingAs($user)->getJson("/api/organizations/{$second->id}/reviews")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.author_name', 'Second');
+    }
+
     public function test_per_page_above_50_is_rejected(): void
     {
         $user = $this->seedUser();
@@ -156,6 +185,35 @@ class AuthAndOrganizationTest extends TestCase
         $this->assertSame(ParsingStatus::Success, $organization->parsing_status);
         $this->assertSame(3, $organization->reviews()->count());
         $this->assertSame(4.7, $organization->rating);
+        $this->assertSame(2, $organization->ratingSnapshots()->count());
+    }
+
+    public function test_rating_history_and_parser_monitoring_are_available(): void
+    {
+        $user = $this->seedUser();
+        $success = $this->organizationFor($user, 'https://yandex.ru/maps/org/success');
+        $failed = $this->organizationFor($user, 'https://yandex.ru/maps/org/failed');
+
+        $success->ratingSnapshots()->create([
+            'rating' => 4.6,
+            'ratings_count' => 100,
+            'reviews_count' => 50,
+            'captured_at' => now(),
+        ]);
+        $failed->update([
+            'parsing_status' => ParsingStatus::Failed,
+            'parsing_error' => 'Blocked by Yandex.',
+        ]);
+
+        $this->actingAs($user)->getJson("/api/organizations/{$success->id}/rating-history")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.rating', 4.6);
+
+        $this->actingAs($user)->getJson('/api/parser-monitoring')
+            ->assertOk()
+            ->assertJsonPath('data.counts.failed', 1)
+            ->assertJsonPath('data.recent_errors.0.parsing_error', 'Blocked by Yandex.');
     }
 
     public function test_parser_error_marks_organization_as_failed(): void
@@ -188,12 +246,12 @@ class AuthAndOrganizationTest extends TestCase
         ]);
     }
 
-    private function organizationFor(User $user): Organization
+    private function organizationFor(User $user, string $url = 'https://yandex.ru/maps/org/test'): Organization
     {
         return Organization::query()->create([
             'user_id' => $user->id,
-            'yandex_url' => 'https://yandex.ru/maps/org/test',
-            'normalized_yandex_url' => 'https://yandex.ru/maps/org/test',
+            'yandex_url' => $url,
+            'normalized_yandex_url' => $url,
             'parsing_status' => ParsingStatus::Success,
         ]);
     }

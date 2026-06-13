@@ -1,16 +1,9 @@
 import { chromium } from 'playwright';
+import { expansionLabels, moreReviewsLabels, reviewSelectors } from './extraction.js';
 
 const inputUrl = process.argv[2];
 const maxReviews = Number(process.env.YANDEX_MAX_REVIEWS || 700);
 const timeoutMs = Number(process.env.YANDEX_PARSER_TIMEOUT || 180) * 1000;
-
-const reviewSelectors = [
-  '[class*="business-review-view"]',
-  '[class*="business-reviews-card-view__review"]',
-  '[class*="review-snippet-view"]',
-  '[data-review-id]',
-  '[data-testid*="review"]'
-];
 
 function printError(code, message) {
   process.stdout.write(JSON.stringify({ error: { code, message } }));
@@ -36,8 +29,7 @@ async function clickIfVisible(page, patterns, timeout = 2500) {
 }
 
 async function expandVisibleReviewTexts(page) {
-  await page.evaluate(() => {
-    const labels = ['Читать полностью', 'Показать полностью', 'ещё', 'Еще'];
+  await page.evaluate((labels) => {
     const buttons = Array.from(document.querySelectorAll('button, [role="button"], a'));
 
     for (const button of buttons) {
@@ -46,7 +38,7 @@ async function expandVisibleReviewTexts(page) {
         button.click();
       }
     }
-  }).catch(() => {});
+  }, expansionLabels).catch(() => {});
 }
 
 async function scrollReviews(page, startedAt) {
@@ -85,7 +77,7 @@ async function scrollReviews(page, startedAt) {
       };
     }, { selector, maxReviews });
 
-    await clickIfVisible(page, [/Показать ещё/i, /Загрузить ещё/i, /Ещё отзывы/i], 700);
+    await clickIfVisible(page, moreReviewsLabels, 700);
     await page.waitForTimeout(850);
 
     if (state.reachedLimit) {
