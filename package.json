@@ -6,7 +6,7 @@
         "build": "vite build",
         "dev": "vite",
         "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers node tests/e2e/app-smoke.mjs",
-        "test:frontend": "vitest run"
+        "test:frontend": "LARAVEL_BYPASS_ENV_CHECK=1 vitest run"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
