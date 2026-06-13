@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:browsers": "playwright install chromium",
+    "parse": "node yandex-parser.js"
+  },
+  "dependencies": {
+    "playwright": "^1.57.0"
+  }
+}
