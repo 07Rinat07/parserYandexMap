@@ -1,8 +1,10 @@
 services:
   app:
     build: .
-    command: sh -c "mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache && chmod -R a+rwX storage bootstrap/cache && php-fpm"
+    command: sh docker/laravel/entrypoint.sh php-fpm
     env_file: .env
+    environment:
+      LARAVEL_BOOTSTRAP_ROLE: primary
     volumes:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
@@ -41,8 +43,10 @@ services:
 
   queue:
     build: .
-    command: sh -c "mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache && chmod -R a+rwX storage bootstrap/cache && php artisan queue:work --tries=3 --timeout=190"
+    command: sh docker/laravel/entrypoint.sh php artisan queue:work --tries=3 --timeout=190
     env_file: .env
+    environment:
+      LARAVEL_BOOTSTRAP_ROLE: worker
     volumes:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
@@ -56,8 +60,10 @@ services:
 
   scheduler:
     build: .
-    command: sh -c "mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache && chmod -R a+rwX storage bootstrap/cache && while true; do php artisan schedule:run --no-interaction; sleep 60; done"
+    command: sh docker/laravel/entrypoint.sh sh -c "while true; do php artisan schedule:run --no-interaction; sleep 60; done"
     env_file: .env
+    environment:
+      LARAVEL_BOOTSTRAP_ROLE: worker
     volumes:
       - .:/var/www/html
       - vendor:/var/www/html/vendor

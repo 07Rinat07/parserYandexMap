@@ -26,9 +26,17 @@
 ```bash
 cp .env.example .env
 docker compose up -d --build
-docker compose exec app php artisan key:generate
-docker compose exec app php artisan migrate --seed
 ```
+
+При первом старте контейнер `app` сам:
+
+- ждет готовности MySQL;
+- создает writable-директории Laravel;
+- генерирует `APP_KEY`, если в `.env` он пустой;
+- применяет миграции;
+- запускает сидер с тестовым пользователем.
+
+Поэтому после чистого `docker compose down -v` не нужно вручную запускать `key:generate` и `migrate --seed`: это сделает bootstrap-скрипт `docker/laravel/entrypoint.sh`.
 
 После запуска:
 
@@ -110,13 +118,47 @@ https://yandex.kz/maps/org/khalyq_sharuashylyghy_zhetistikterining_kormesi/14907
 
 ## Важные команды
 
-Пересобрать и поднять проект:
+Первый запуск с нуля:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Открыть приложение:
+
+```text
+http://localhost:8080
+```
+
+Пересобрать код без удаления данных MySQL:
 
 ```bash
 docker compose up -d --build
 ```
 
-Применить миграции и сид:
+Перезапустить контейнеры без пересборки:
+
+```bash
+docker compose up -d
+```
+
+Остановить проект, сохранив базу:
+
+```bash
+docker compose down
+```
+
+Полностью удалить контейнеры и данные MySQL, затем поднять заново:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
+После `down -v` база будет пустой, но при следующем `up` миграции и сидер применятся автоматически.
+
+Ручной запуск миграций и сида, если нужно проверить состояние БД:
 
 ```bash
 docker compose exec app php artisan migrate --seed
@@ -144,18 +186,6 @@ docker compose logs -f app queue parser
 
 ```bash
 curl http://localhost:3000/health
-```
-
-Остановить проект:
-
-```bash
-docker compose down
-```
-
-Остановить и удалить данные MySQL:
-
-```bash
-docker compose down -v
 ```
 
 ## Как работает основной поток
