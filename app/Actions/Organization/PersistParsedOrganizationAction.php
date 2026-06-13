@@ -29,7 +29,14 @@ final readonly class PersistParsedOrganizationAction
                 'parsing_status' => ParsingStatus::Success,
                 'parsing_error' => null,
                 'parser_confidence' => $data->parserConfidence,
-                'parser_metadata' => $data->parserMetadata,
+                'parser_metadata' => array_replace_recursive($data->parserMetadata ?? [], [
+                    'progress' => [
+                        'stage' => 'completed',
+                        'message' => 'Данные успешно сохранены.',
+                        'reviews_seen' => $data->reviews->count(),
+                        'updated_at' => now()->toIso8601String(),
+                    ],
+                ]),
                 'last_parsed_at' => now(),
             ]);
 

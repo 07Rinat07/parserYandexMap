@@ -43,6 +43,7 @@ const props = defineProps({
 });
 
 const formats = [
+    { value: 'xlsx', label: 'XLSX' },
     { value: 'csv', label: 'CSV для Excel' },
     { value: 'json', label: 'JSON' },
     { value: 'txt', label: 'TXT' },

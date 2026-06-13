@@ -5,9 +5,17 @@
                 <p class="eyebrow">История рейтинга</p>
                 <h2>{{ history.length }} снимков</h2>
             </div>
+            <button type="button" class="ghost-button compact-button" :disabled="capturing" @click="$emit('capture')">
+                <Camera :size="16" />
+                <span>{{ capturing ? 'Создаем' : 'Снимок' }}</span>
+            </button>
         </div>
 
-        <EmptyState v-if="history.length === 0" message="История появится после успешных обновлений." />
+        <p class="muted history-hint">
+            История пополняется после успешного парсинга. Для демонстрации можно создать снимок текущих счетчиков вручную.
+        </p>
+
+        <EmptyState v-if="history.length === 0" message="История появится после успешных обновлений или ручного снимка." />
 
         <template v-else>
             <div class="history-stats">
@@ -86,6 +94,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { Camera } from '@lucide/vue';
 import EmptyState from './EmptyState.vue';
 
 const props = defineProps({
@@ -93,7 +102,13 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    capturing: {
+        type: Boolean,
+        default: false,
+    },
 });
+
+defineEmits(['capture']);
 
 const chronological = computed(() => [...props.history].reverse());
 const ratedSnapshots = computed(() => chronological.value.filter((snapshot) => snapshot.rating !== null && snapshot.rating !== undefined));

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use RuntimeException;
 use Tests\TestCase;
+use ZipArchive;
 
 class AuthAndOrganizationTest extends TestCase
 {
@@ -99,6 +100,24 @@ class AuthAndOrganizationTest extends TestCase
             ->assertJsonPath('data.parsing_status', ParsingStatus::Pending->value);
 
         Queue::assertPushed(ParseYandexOrganizationJob::class);
+    }
+
+    public function test_refresh_does_not_dispatch_duplicate_job_when_parsing_is_active(): void
+    {
+        Queue::fake();
+        $user = $this->seedUser();
+        $organization = Organization::query()->create([
+            'user_id' => $user->id,
+            'yandex_url' => 'https://yandex.ru/maps/org/test',
+            'normalized_yandex_url' => 'https://yandex.ru/maps/org/test',
+            'parsing_status' => ParsingStatus::Processing,
+        ]);
+
+        $this->actingAs($user)->postJson("/api/organizations/{$organization->id}/refresh")
+            ->assertOk()
+            ->assertJsonPath('data.parsing_status', ParsingStatus::Processing->value);
+
+        Queue::assertNothingPushed();
     }
 
     public function test_reviews_endpoint_returns_only_current_user_reviews_with_meta(): void
@@ -216,6 +235,24 @@ class AuthAndOrganizationTest extends TestCase
             ->assertJsonPath('data.recent_errors.0.parsing_error', 'Blocked by Yandex.');
     }
 
+    public function test_user_can_create_manual_rating_snapshot(): void
+    {
+        $user = $this->seedUser();
+        $organization = $this->organizationFor($user, 'https://yandex.ru/maps/org/snapshot');
+        $organization->update([
+            'rating' => 4.9,
+            'ratings_count' => 200,
+            'reviews_count' => 90,
+        ]);
+
+        $this->actingAs($user)->postJson("/api/organizations/{$organization->id}/rating-history")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.rating', 4.9)
+            ->assertJsonPath('data.0.ratings_count', 200)
+            ->assertJsonPath('data.0.reviews_count', 90);
+    }
+
     public function test_user_can_export_organization_reviews_as_csv_and_json(): void
     {
         $user = $this->seedUser();
@@ -253,6 +290,22 @@ class AuthAndOrganizationTest extends TestCase
         $this->assertSame('Test Place', $payload['organization']['name']);
         $this->assertSame('Export text', $payload['reviews'][0]['text']);
         $this->assertSame(4.8, $payload['rating_history'][0]['rating']);
+
+        $xlsx = $this->actingAs($user)->get("/api/organizations/{$organization->id}/export?format=xlsx");
+        $xlsx->assertOk();
+        $xlsx->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $path = tempnam(sys_get_temp_dir(), 'xlsx-test-');
+        file_put_contents($path, $xlsx->streamedContent());
+        $zip = new ZipArchive();
+        $this->assertTrue($zip->open($path));
+        $this->assertNotFalse($zip->locateName('xl/workbook.xml'));
+        $this->assertStringContainsString('Организация', $zip->getFromName('xl/workbook.xml'));
+        $this->assertStringContainsString('Отзывы', $zip->getFromName('xl/workbook.xml'));
+        $this->assertStringContainsString('История', $zip->getFromName('xl/workbook.xml'));
+        $this->assertStringContainsString('Export Author', $zip->getFromName('xl/worksheets/sheet2.xml'));
+        $zip->close();
+        unlink($path);
     }
 
     public function test_user_cannot_export_foreign_organization(): void

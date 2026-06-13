@@ -31,6 +31,11 @@ export async function getRatingHistory(id) {
     return data.data;
 }
 
+export async function createRatingSnapshot(id) {
+    const { data } = await apiClient.post(`/organizations/${id}/rating-history`);
+    return data.data;
+}
+
 export async function getParserMonitoring() {
     const { data } = await apiClient.get('/parser-monitoring');
     return data.data;

@@ -16,7 +16,8 @@
 - Дедупликация отзывов по `external_id` или fingerprint.
 - История рейтинга и счетчиков после каждого успешного парсинга.
 - Мониторинг статусов parser-а и retry для проблемных карточек.
-- Экспорт данных по организации в `CSV для Excel`, `JSON` и `TXT`.
+- Экспорт данных по организации в настоящий `XLSX`, `CSV для Excel`, `JSON` и `TXT`.
+- Защита от повторного запуска одинакового парсинга, пока карточка уже `pending` или `processing`.
 
 ## Быстрый запуск для проверки
 
@@ -50,7 +51,7 @@ password: password
 
 ## Ссылки для ручной проверки
 
-Можно вставить любую карточку организации Яндекс.Карт. Для smoke-теста подходят:
+Можно вставить любую карточку организации Яндекс.Карт. Для smoke-теста подходят проверенные карточки:
 
 ```text
 https://yandex.kz/maps/org/moskvarium/1367420415/reviews/
@@ -63,6 +64,8 @@ https://yandex.kz/maps/org/tretyakovskaya_galereya/21117108341/reviews/
 ```text
 https://yandex.kz/maps/org/khalyq_sharuashylyghy_zhetistikterining_kormesi/149076928950/reviews/
 ```
+
+Дополнительно можно проверить любую небольшую локальную организацию: чем меньше отзывов, тем быстрее smoke-run. Важно вставлять именно ссылку на карточку `/maps/org/...`, а не поисковую выдачу.
 
 Обычно первый результат появляется через 30-60 секунд. Во время работы будет статус `Ожидает` или `В работе`; после успешного завершения появятся рейтинг, счетчики, отзывы, история и экспорт.
 
@@ -81,7 +84,7 @@ https://yandex.kz/maps/org/khalyq_sharuashylyghy_zhetistikterining_kormesi/14907
    - список отзывов;
    - пагинацию по 50 отзывов;
    - историю рейтинга;
-   - экспорт CSV/JSON/TXT.
+   - экспорт XLSX/CSV/JSON/TXT.
 
 ## Docker-сервисы
 
@@ -161,12 +164,13 @@ docker compose down -v
 2. Laravel валидирует ссылку через `StoreYandexOrganizationRequest` и `YandexMapsUrlValidator`.
 3. `YandexMapsUrlNormalizer` приводит ссылку к стабильному виду.
 4. `SaveYandexOrganizationAction` сохраняет или обновляет запись в `organizations`.
-5. В Redis-очередь отправляется `ParseYandexOrganizationJob`.
-6. Queue worker переводит организацию в `processing`.
-7. Laravel вызывает parser microservice `http://parser:3000/parse`.
-8. Parser открывает Яндекс.Карты в Chromium, переходит к отзывам, прокручивает список и собирает доступные отзывы.
-9. `PersistParsedOrganizationAction` сохраняет рейтинг, счетчики, отзывы и снимок истории.
-10. Frontend polling-ом обновляет статус и показывает данные без перезагрузки страницы.
+5. Если карточка уже `pending` или `processing`, новая такая же задача не создается.
+6. В Redis-очередь отправляется `ParseYandexOrganizationJob`.
+7. Queue worker переводит организацию в `processing` и обновляет `parser_metadata.progress`.
+8. Laravel вызывает parser microservice `http://parser:3000/parse`.
+9. Parser открывает Яндекс.Карты в Chromium, переходит к отзывам, прокручивает список и собирает доступные отзывы.
+10. `PersistParsedOrganizationAction` сохраняет рейтинг, счетчики, отзывы и снимок истории.
+11. Frontend polling-ом обновляет статус, progress и показывает данные без перезагрузки страницы.
 
 Контроллеры остаются тонкими: бизнес-логика лежит в `app/Actions`, parser wrappers в `app/Services/Yandex`, экспорт в `app/Services/Exports`.
 
@@ -201,6 +205,7 @@ password: password
 
 Доступные форматы:
 
+- `XLSX` — настоящий Excel workbook OpenXML с листами `Организация`, `Отзывы`, `История`.
 - `CSV для Excel` — файл с UTF-8 BOM и разделителем `;`, удобно открывается в Excel/LibreOffice.
 - `JSON` — структурированные данные: организация, отзывы, история рейтинга.
 - `TXT` — простой текстовый отчет.
@@ -208,6 +213,7 @@ password: password
 API endpoint:
 
 ```text
+GET /api/organizations/{id}/export?format=xlsx
 GET /api/organizations/{id}/export?format=csv
 GET /api/organizations/{id}/export?format=json
 GET /api/organizations/{id}/export?format=txt
@@ -230,6 +236,8 @@ Endpoint защищен `auth:sanctum` и отдает данные только
 - список последних снимков.
 
 Если рейтинг у организации не меняется, график будет ровным. Это нормальное состояние, поэтому UI дополнительно показывает текст `без изменений` и дельты по оценкам/отзывам.
+
+Для демонстрации истории есть кнопка `Снимок`: она сохраняет текущие рейтинг/счетчики в `rating_snapshots` без нового парсинга.
 
 ## API endpoints
 
@@ -255,7 +263,8 @@ GET  /api/organizations/{id}
 POST /api/organizations/{id}/refresh
 GET  /api/organizations/{id}/reviews?page=1&per_page=50
 GET  /api/organizations/{id}/rating-history
-GET  /api/organizations/{id}/export?format=csv|json|txt
+POST /api/organizations/{id}/rating-history
+GET  /api/organizations/{id}/export?format=xlsx|csv|json|txt
 
 GET  /api/parser-monitoring
 ```
@@ -297,10 +306,13 @@ Parser не использует аккаунты, внешние cookies, proxy
 - `confidence`;
 - `warnings`;
 - `diagnostics`.
+- `progress`.
 
 Laravel сохраняет это в `organizations.parser_metadata` и `organizations.parser_confidence`.
 
 Если `confidence` ниже `YANDEX_MINIMUM_PARSER_CONFIDENCE`, результат считается небезопасным и организация переводится в `failed`. Это нужно, чтобы при изменении DOM Яндекса не сохранять мусорные данные как успешные.
+
+В UI есть раскрываемый блок `Parser diagnostics`: stage/message progress, `reviews_seen`, strategy, contract version, elapsed time, warnings и selector hits. Это помогает быстро понять, сломался ли DOM-контракт Яндекса или parser просто не нашел новые отзывы.
 
 ## Переменные окружения
 
@@ -381,6 +393,7 @@ npx --prefix parser playwright install --with-deps chromium
 php artisan test
 npm run test:frontend
 npm run build
+npm run test:e2e
 node --check parser/yandex-parser.js
 node --check parser/server.js
 node --check parser/parse-core.js
@@ -388,7 +401,66 @@ node --check parser/browser-pool.js
 node --check parser/persistent-queue.js
 ```
 
-Покрытие включает auth/API, несколько организаций, scoped reviews, pagination, rating history, parser monitoring, export, URL validation, DTO, fingerprint, fake parser persistence/deduplication, parser wrapper errors и базовые Vue-компоненты.
+`npm run test:e2e` запускается против уже поднятого приложения. По умолчанию использует `http://localhost:8080`, `test@example.com / password` и smoke-ссылку на Москвариум. Настройки:
+
+```text
+E2E_BASE_URL=http://localhost:8080
+E2E_EMAIL=test@example.com
+E2E_PASSWORD=password
+E2E_YANDEX_URL=https://yandex.kz/maps/org/moskvarium/1367420415/reviews/
+E2E_TIMEOUT_MS=240000
+```
+
+Покрытие включает auth/API, несколько организаций, scoped reviews, pagination, rating history, manual snapshots, parser monitoring, export XLSX/CSV/JSON, URL validation, DTO, fingerprint, fake parser persistence/deduplication, parser wrapper errors, E2E smoke и базовые Vue-компоненты.
+
+## Production deploy
+
+ Минимальная production-схема для хостинга:
+
+- один HTTP entrypoint: Nginx/Traefik/Caddy -> Laravel public directory;
+- PHP-FPM app container;
+- отдельный queue worker `php artisan queue:work --tries=3 --timeout=190`;
+- отдельный scheduler process `php artisan schedule:work` или cron `php artisan schedule:run` каждую минуту;
+- отдельный parser service `npm --prefix parser run serve`;
+- MySQL;
+- Redis;
+- HTTPS на внешнем домене.
+
+В production наружу обычно открывается только HTTP/HTTPS. MySQL, Redis и parser port должны быть доступны только внутри private network.
+
+Минимальные production env:
+
+```text
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://your-domain.example
+FRONTEND_URL=https://your-domain.example
+SANCTUM_STATEFUL_DOMAINS=your-domain.example
+
+DB_HOST=your-mysql-host
+DB_DATABASE=yandex_reviews
+DB_USERNAME=...
+DB_PASSWORD=...
+
+QUEUE_CONNECTION=redis
+REDIS_HOST=your-redis-host
+
+YANDEX_PARSER_MODE=microservice
+YANDEX_PARSER_SERVICE_URL=http://parser:3000
+PARSER_QUEUE_DRIVER=redis
+PARSER_REDIS_URL=redis://redis:6379
+```
+
+После деплоя:
+
+```bash
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+Queue и scheduler должны быть под process manager-ом: Docker Compose restart policy, Supervisor, systemd или аналог.
 
 ## Типичные проблемы
 
@@ -442,8 +514,8 @@ curl http://localhost:3000/health
 - отдельный production parser service с observability;
 - proxy/region strategy в рамках легального использования;
 - richer retry policies;
-- полноценный `.xlsx` через отдельную библиотеку;
-- E2E-тесты браузером для всего сценария login -> parse -> export.
+- больше E2E-сценариев для ошибок parser-а и повторных запусков;
+- отдельный экран администрирования parser queue.
 
 ## Безопасность
 

@@ -9,6 +9,7 @@ export function useOrganization() {
     const loading = ref(false);
     const saving = ref(false);
     const refreshing = ref(false);
+    const capturingSnapshot = ref(false);
     const error = ref('');
 
     async function load() {
@@ -88,6 +89,22 @@ export function useOrganization() {
         ratingHistory.value = await organizationApi.getRatingHistory(id);
     }
 
+    async function captureSnapshot(id = organization.value?.id) {
+        if (!id) {
+            return;
+        }
+
+        capturingSnapshot.value = true;
+        error.value = '';
+        try {
+            ratingHistory.value = await organizationApi.createRatingSnapshot(id);
+        } catch (exception) {
+            error.value = exception.response?.data?.message || 'Не удалось создать снимок истории.';
+        } finally {
+            capturingSnapshot.value = false;
+        }
+    }
+
     async function loadMonitoring() {
         monitoring.value = await organizationApi.getParserMonitoring();
     }
@@ -100,6 +117,7 @@ export function useOrganization() {
         loading,
         saving,
         refreshing,
+        capturingSnapshot,
         error,
         load,
         loadAll,
@@ -107,6 +125,7 @@ export function useOrganization() {
         save,
         refresh,
         loadHistory,
+        captureSnapshot,
         loadMonitoring,
     };
 }

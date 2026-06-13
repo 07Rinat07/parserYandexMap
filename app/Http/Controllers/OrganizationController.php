@@ -83,4 +83,19 @@ class OrganizationController extends Controller
 
         return RatingSnapshotResource::collection($snapshots);
     }
+
+    public function snapshot(Request $request, Organization $organization): AnonymousResourceCollection
+    {
+        abort_unless($organization->user_id === $request->user()->id, 404);
+        abort_if($organization->rating === null && $organization->ratings_count === null && $organization->reviews_count === null, 422, 'Нет данных для снимка рейтинга.');
+
+        $organization->ratingSnapshots()->create([
+            'rating' => $organization->rating,
+            'ratings_count' => $organization->ratings_count,
+            'reviews_count' => $organization->reviews_count,
+            'captured_at' => now(),
+        ]);
+
+        return $this->history($request, $organization);
+    }
 }

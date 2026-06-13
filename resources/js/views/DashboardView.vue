@@ -58,7 +58,11 @@
                 @page-change="handlePageChange"
             />
 
-            <RatingHistory :history="ratingHistory" />
+            <RatingHistory
+                :history="ratingHistory"
+                :capturing="capturingSnapshot"
+                @capture="handleCaptureSnapshot"
+            />
         </template>
     </main>
 </template>
@@ -92,6 +96,7 @@ const {
     loading,
     saving,
     refreshing,
+    capturingSnapshot,
     error,
     load,
     loadAll,
@@ -99,6 +104,7 @@ const {
     save,
     refresh,
     loadHistory,
+    captureSnapshot,
     loadMonitoring,
 } = useOrganization();
 const { reviews, meta, loading: reviewsLoading, error: reviewsError, load: loadReviews } = useReviews();
@@ -178,6 +184,10 @@ async function handleSelect(id) {
 
 async function handlePageChange(page) {
     await loadReviews(page, organization.value?.id);
+}
+
+async function handleCaptureSnapshot() {
+    await captureSnapshot(organization.value?.id);
 }
 
 async function signOut() {

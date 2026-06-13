@@ -40,13 +40,23 @@
             <span v-for="warning in warnings" :key="warning">{{ warning }}</span>
         </div>
 
+        <p v-if="progress" class="parser-progress">
+            {{ progress.message }}
+            <span v-if="progress.reviews_seen !== undefined">Найдено: {{ progress.reviews_seen }}</span>
+        </p>
+
         <ErrorState v-if="organization.parsing_error" :message="organization.parsing_error" />
+        <ParserDiagnostics
+            :metadata="organization.parser_metadata"
+            :confidence="organization.parser_confidence"
+        />
     </section>
 </template>
 
 <script setup>
 import { computed } from 'vue';
 import ErrorState from './ErrorState.vue';
+import ParserDiagnostics from './ParserDiagnostics.vue';
 import ParsingStatusBadge from './ParsingStatusBadge.vue';
 
 const props = defineProps({
@@ -68,4 +78,5 @@ const lastParsed = computed(() => {
 });
 
 const warnings = computed(() => props.organization.parser_metadata?.warnings || []);
+const progress = computed(() => props.organization.parser_metadata?.progress || null);
 </script>

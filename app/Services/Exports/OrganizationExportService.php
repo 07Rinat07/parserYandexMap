@@ -5,16 +5,19 @@ namespace App\Services\Exports;
 use App\Models\Organization;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use RuntimeException;
+use ZipArchive;
 
 final class OrganizationExportService
 {
     public const FORMAT_CSV = 'csv';
     public const FORMAT_JSON = 'json';
     public const FORMAT_TXT = 'txt';
+    public const FORMAT_XLSX = 'xlsx';
 
     public function formats(): array
     {
-        return [self::FORMAT_CSV, self::FORMAT_JSON, self::FORMAT_TXT];
+        return [self::FORMAT_XLSX, self::FORMAT_CSV, self::FORMAT_JSON, self::FORMAT_TXT];
     }
 
     public function filename(Organization $organization, string $format): string
@@ -32,6 +35,7 @@ final class OrganizationExportService
             self::FORMAT_CSV => 'text/csv; charset=UTF-8',
             self::FORMAT_JSON => 'application/json; charset=UTF-8',
             self::FORMAT_TXT => 'text/plain; charset=UTF-8',
+            self::FORMAT_XLSX => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             default => throw new InvalidArgumentException('Unsupported export format.'),
         };
     }
@@ -47,6 +51,7 @@ final class OrganizationExportService
             self::FORMAT_CSV => $this->csv($organization),
             self::FORMAT_JSON => $this->json($organization),
             self::FORMAT_TXT => $this->txt($organization),
+            self::FORMAT_XLSX => $this->xlsx($organization),
             default => throw new InvalidArgumentException('Unsupported export format.'),
         };
     }
@@ -135,6 +140,72 @@ final class OrganizationExportService
         return implode(PHP_EOL, $lines).PHP_EOL;
     }
 
+    private function xlsx(Organization $organization): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'yandex-reviews-');
+        if ($path === false) {
+            throw new RuntimeException('Unable to create temporary XLSX file.');
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($path, ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Unable to open temporary XLSX archive.');
+        }
+
+        $zip->addFromString('[Content_Types].xml', $this->xlsxContentTypes());
+        $zip->addFromString('_rels/.rels', $this->xlsxRootRels());
+        $zip->addFromString('xl/workbook.xml', $this->xlsxWorkbook());
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->xlsxWorkbookRels());
+        $zip->addFromString('xl/worksheets/sheet1.xml', $this->xlsxSheet(array_merge(
+            [['Поле', 'Значение']],
+            $this->summaryRows($organization),
+        )));
+        $zip->addFromString('xl/worksheets/sheet2.xml', $this->xlsxSheet($this->reviewRows($organization)));
+        $zip->addFromString('xl/worksheets/sheet3.xml', $this->xlsxSheet($this->historyRows($organization)));
+        $zip->close();
+
+        $content = file_get_contents($path);
+        @unlink($path);
+
+        if ($content === false) {
+            throw new RuntimeException('Unable to read temporary XLSX file.');
+        }
+
+        return $content;
+    }
+
+    private function reviewRows(Organization $organization): array
+    {
+        $rows = [['Автор', 'Дата', 'Оценка', 'Текст']];
+
+        foreach ($organization->reviews as $review) {
+            $rows[] = [
+                $review->author_name,
+                $review->review_date?->toDateString(),
+                $review->rating,
+                $review->text,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function historyRows(Organization $organization): array
+    {
+        $rows = [['Рейтинг', 'Количество оценок', 'Количество отзывов', 'Дата снимка']];
+
+        foreach ($organization->ratingSnapshots as $snapshot) {
+            $rows[] = [
+                $snapshot->rating,
+                $snapshot->ratings_count,
+                $snapshot->reviews_count,
+                $snapshot->captured_at?->toDateTimeString(),
+            ];
+        }
+
+        return $rows;
+    }
+
     private function summaryRows(Organization $organization): array
     {
         return [
@@ -154,5 +225,100 @@ final class OrganizationExportService
     private function putCsv($handle, array $row): void
     {
         fputcsv($handle, $row, ';');
+    }
+
+    private function xlsxContentTypes(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>
+XML;
+    }
+
+    private function xlsxRootRels(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>
+XML;
+    }
+
+    private function xlsxWorkbook(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Организация" sheetId="1" r:id="rId1"/>
+    <sheet name="Отзывы" sheetId="2" r:id="rId2"/>
+    <sheet name="История" sheetId="3" r:id="rId3"/>
+  </sheets>
+</workbook>
+XML;
+    }
+
+    private function xlsxWorkbookRels(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+</Relationships>
+XML;
+    }
+
+    private function xlsxSheet(array $rows): string
+    {
+        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+
+        foreach ($rows as $rowIndex => $row) {
+            $number = $rowIndex + 1;
+            $xml .= '<row r="'.$number.'">';
+
+            foreach (array_values($row) as $columnIndex => $value) {
+                $reference = $this->xlsxColumn($columnIndex + 1).$number;
+                $xml .= $this->xlsxCell($reference, $value);
+            }
+
+            $xml .= '</row>';
+        }
+
+        return $xml.'</sheetData></worksheet>';
+    }
+
+    private function xlsxCell(string $reference, mixed $value): string
+    {
+        if (is_int($value) || is_float($value)) {
+            return '<c r="'.$reference.'"><v>'.$value.'</v></c>';
+        }
+
+        $text = htmlspecialchars((string) ($value ?? ''), ENT_XML1 | ENT_COMPAT, 'UTF-8');
+
+        return '<c r="'.$reference.'" t="inlineStr"><is><t xml:space="preserve">'.$text.'</t></is></c>';
+    }
+
+    private function xlsxColumn(int $index): string
+    {
+        $name = '';
+
+        while ($index > 0) {
+            $index--;
+            $name = chr(65 + ($index % 26)).$name;
+            $index = intdiv($index, 26);
+        }
+
+        return $name;
     }
 }

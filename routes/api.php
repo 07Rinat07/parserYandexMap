@@ -24,5 +24,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/organizations/{organization}/export', OrganizationExportController::class);
     Route::get('/organizations/{organization}/reviews', [ReviewController::class, 'indexForOrganization']);
     Route::get('/organizations/{organization}/rating-history', [OrganizationController::class, 'history']);
+    Route::post('/organizations/{organization}/rating-history', [OrganizationController::class, 'snapshot']);
     Route::get('/parser-monitoring', [ParserMonitoringController::class, 'summary']);
 });

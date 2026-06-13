@@ -46,10 +46,28 @@ class ParseYandexOrganizationJob implements ShouldQueue
             $organization->update([
                 'parsing_status' => ParsingStatus::Processing,
                 'parsing_error' => null,
+                'parser_metadata' => array_replace_recursive($organization->parser_metadata ?? [], [
+                    'progress' => [
+                        'stage' => 'parsing',
+                        'message' => 'Парсер открыл карточку и собирает отзывы.',
+                        'reviews_seen' => 0,
+                        'updated_at' => now()->toIso8601String(),
+                    ],
+                ]),
             ]);
 
             try {
                 $data = $parser->parse($organization->normalized_yandex_url);
+                $organization->update([
+                    'parser_metadata' => array_replace_recursive($organization->parser_metadata ?? [], [
+                        'progress' => [
+                            'stage' => 'saving',
+                            'message' => 'Парсер получил данные, сохраняем отзывы.',
+                            'reviews_seen' => $data->reviews->count(),
+                            'updated_at' => now()->toIso8601String(),
+                        ],
+                    ]),
+                ]);
                 $persist->execute($organization, $data);
             } catch (Throwable $exception) {
                 if ($this->job && $this->attempts() < $this->tries) {
@@ -72,6 +90,13 @@ class ParseYandexOrganizationJob implements ShouldQueue
         $organization->update([
             'parsing_status' => ParsingStatus::Failed,
             'parsing_error' => mb_substr($exception->getMessage() ?: 'Не удалось получить данные Яндекс.Карт.', 0, 500),
+            'parser_metadata' => array_replace_recursive($organization->parser_metadata ?? [], [
+                'progress' => [
+                    'stage' => 'failed',
+                    'message' => 'Парсер завершился ошибкой.',
+                    'updated_at' => now()->toIso8601String(),
+                ],
+            ]),
         ]);
     }
 }

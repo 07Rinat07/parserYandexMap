@@ -149,6 +149,11 @@ p {
     color: #1f2933;
 }
 
+.compact-button {
+    min-height: 34px;
+    padding: 0 12px;
+}
+
 .eyebrow {
     color: #677788;
     font-size: 12px;
@@ -239,6 +244,87 @@ p {
     font-size: 13px;
     font-weight: 700;
     padding: 5px 9px;
+}
+
+.parser-progress {
+    background: #eef7f4;
+    border: 1px solid #b9ded0;
+    border-radius: 8px;
+    color: #1f6f5b;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 14px;
+    font-weight: 700;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 10px 12px;
+}
+
+.parser-diagnostics {
+    border-top: 1px solid #e1e7ec;
+    margin-top: 16px;
+    padding-top: 14px;
+}
+
+.parser-diagnostics summary {
+    align-items: center;
+    color: #52616f;
+    cursor: pointer;
+    display: flex;
+    font-size: 14px;
+    font-weight: 800;
+    justify-content: space-between;
+}
+
+.diagnostics-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 12px;
+}
+
+.diagnostics-grid div {
+    background: #f6f7f9;
+    border: 1px solid #e1e7ec;
+    border-radius: 8px;
+    display: grid;
+    gap: 4px;
+    padding: 12px;
+}
+
+.diagnostics-grid span {
+    color: #677788;
+    font-size: 13px;
+}
+
+.diagnostics-grid strong {
+    overflow-wrap: anywhere;
+}
+
+.diagnostics-warnings {
+    margin-top: 12px;
+}
+
+.selector-hits {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.selector-hits div {
+    align-items: center;
+    border: 1px solid #e1e7ec;
+    border-radius: 8px;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr auto;
+    padding: 9px 11px;
+}
+
+.selector-hits code {
+    color: #52616f;
+    font-size: 12px;
+    overflow-wrap: anywhere;
 }
 
 .export-panel {
@@ -367,6 +453,10 @@ p {
     gap: 12px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-top: 12px;
+}
+
+.history-hint {
+    margin-top: 10px;
 }
 
 .history-stats div {
@@ -516,6 +606,7 @@ p {
     }
 
     .monitor-grid,
+    .diagnostics-grid,
     .history-stats,
     .history-row,
     .error-list article {
