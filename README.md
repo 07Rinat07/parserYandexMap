@@ -1,51 +1,26 @@
 # Yandex Maps Reviews Parser
 
-## Описание
+Рабочий прототип Laravel + Vue 3 SPA для подключения карточки организации на Яндекс.Картах, фонового парсинга отзывов и просмотра сохраненных рейтингов, счетчиков, отзывов, истории и экспорта данных.
 
-Рабочий прототип Laravel + Vue 3 SPA для подключения карточки организации Яндекс.Карт, запуска фонового парсинга и просмотра сохраненных рейтингов, счетчиков и отзывов.
+## Что умеет приложение
 
-## Стек
-
-- Laravel 13, Sanctum, Queue, Eloquent Resources, PHPUnit.
-- Vue 3, Composition API, Vue Router, Pinia, Axios, Vite, Vitest.
-- MySQL, Redis, Docker Compose.
-- Node.js + Playwright parser как отдельный слой.
-
-## Возможности
-
-- Вход под сид-пользователем без регистрации.
+- Авторизация через Laravel Sanctum без регистрации, с одним сид-пользователем.
+- Ввод ссылки на карточку организации Яндекс.Карт.
 - Валидация и нормализация ссылок `yandex.ru`, `yandex.kz`, `yandex.com`, `yandex.by`.
-- SSRF-защита: запрещены не-HTTPS схемы, localhost, private/reserved IP и посторонние домены.
-- Фоновый запуск `ParseYandexOrganizationJob`.
-- Статусы `pending`, `processing`, `success`, `failed`.
-- Поддержка нескольких организаций на пользователя.
-- Сохранение организаций, счетчиков и отзывов в БД.
+- SSRF-защита: запрещены не-HTTPS ссылки, localhost, private/reserved IP и посторонние домены.
+- Фоновый парсинг через Laravel Queue + Redis.
+- Parser microservice на Node.js + Playwright + Chromium.
+- Сохранение организации, рейтинга, количества оценок, количества отзывов и отзывов в MySQL.
+- Постраничный вывод отзывов по 50 записей без перезагрузки страницы.
+- Поддержка нескольких организаций на одного пользователя.
 - Дедупликация отзывов по `external_id` или fingerprint.
-- История изменения рейтинга после каждого успешного парсинга.
-- Backend pagination по 50 отзывов.
-- SPA polling статуса без перезагрузки страницы.
-- Dashboard мониторинга ошибок parser-а и retry для проблемных карточек.
-- Плановое обновление отзывов через Laravel Scheduler.
-- Browser pool и очередь внутри parser microservice.
-- Нормализация относительных дат отзывов.
-- SVG-график динамики рейтинга.
-- Slack/Telegram alerting при росте parser failures.
-- Production deploy job после успешного CI.
+- История рейтинга и счетчиков после каждого успешного парсинга.
+- Мониторинг статусов parser-а и retry для проблемных карточек.
+- Экспорт данных по организации в `CSV для Excel`, `JSON` и `TXT`.
 
-## Архитектура
+## Быстрый запуск для проверки
 
-Контроллеры тонкие: они валидируют запрос, вызывают action-классы и возвращают resources. Бизнес-логика вынесена в `app/Actions/Organization`, URL-защита и parser wrapper находятся в `app/Services/Yandex`, данные parser-а проходят через DTO.
-
-Основной поток:
-
-1. `POST /api/organization` валидирует URL через `YandexMapsUrlValidator`.
-2. `YandexMapsUrlNormalizer` удаляет лишние query-параметры и сохраняет нормализованную ссылку.
-3. `ParseYandexOrganizationJob` переводит организацию в `processing`.
-4. `YandexOrganizationParserInterface` получает данные из fake, локального Playwright parser-а или отдельного parser microservice.
-5. `PersistParsedOrganizationAction` сохраняет рейтинг, счетчики и отзывы.
-6. Frontend читает данные только из Laravel API.
-
-## Быстрый запуск через Docker
+Нужны Docker и Docker Compose.
 
 ```bash
 cp .env.example .env
@@ -54,61 +29,306 @@ docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate --seed
 ```
 
-Приложение будет доступно на `http://localhost:8080`. Vite dev server доступен на `http://localhost:5173`.
-
-Docker image устанавливает Node-зависимости основного frontend и `parser/`. Для реального Playwright parser-а внутри окружения дополнительно нужно установить Chromium:
-
-```bash
-docker compose exec app npm --prefix parser run install:browsers
-```
-
-## Ручной запуск без Docker
-
-```bash
-cp .env.example .env
-composer install
-npm install
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
-npm run dev
-php artisan queue:work --tries=3 --timeout=190
-php artisan schedule:work
-```
-
-Для локального smoke mode можно поставить `YANDEX_PARSER_MODE=fake`.
-Для вынесенного parser service используйте `YANDEX_PARSER_MODE=microservice` и запустите:
-
-```bash
-npm --prefix parser run serve
-```
-
-## Тестовый пользователь
+После запуска:
 
 ```text
-email: test@example.com
+Приложение:     http://localhost:8080
+Parser health:  http://localhost:3000/health
+Vite dev:       http://localhost:5173
+MySQL host:     127.0.0.1:3307
+Redis host:     127.0.0.1:6380
+```
+
+Тестовый пользователь:
+
+```text
+email:    test@example.com
 password: password
 ```
 
-## Переменные окружения
+Если приложение уже поднималось раньше и в браузере остались старые cookies, после изменения `.env` лучше выйти из аккаунта, обновить страницу или открыть `http://localhost:8080` в инкогнито.
 
-Ключевые переменные:
+## Ссылки для ручной проверки
+
+Можно вставить любую карточку организации Яндекс.Карт. Для smoke-теста подходят:
 
 ```text
-FRONTEND_URL=http://localhost:5173
-SANCTUM_STATEFUL_DOMAINS=localhost,localhost:5173,127.0.0.1,127.0.0.1:5173
+https://yandex.kz/maps/org/moskvarium/1367420415/reviews/
+```
+
+```text
+https://yandex.kz/maps/org/tretyakovskaya_galereya/21117108341/reviews/
+```
+
+```text
+https://yandex.kz/maps/org/khalyq_sharuashylyghy_zhetistikterining_kormesi/149076928950/reviews/
+```
+
+Обычно первый результат появляется через 30-60 секунд. Во время работы будет статус `Ожидает` или `В работе`; после успешного завершения появятся рейтинг, счетчики, отзывы, история и экспорт.
+
+## Как проверять вручную
+
+1. Открыть `http://localhost:8080`.
+2. Войти под `test@example.com / password`.
+3. Вставить ссылку на организацию.
+4. Нажать `Сохранить`.
+5. Дождаться статуса `Готово`.
+6. Проверить:
+   - название организации;
+   - средний рейтинг;
+   - количество оценок;
+   - количество отзывов;
+   - список отзывов;
+   - пагинацию по 50 отзывов;
+   - историю рейтинга;
+   - экспорт CSV/JSON/TXT.
+
+## Docker-сервисы
+
+`docker-compose.yml` поднимает:
+
+- `nginx` — HTTP entrypoint на `localhost:8080`;
+- `app` — PHP-FPM Laravel;
+- `queue` — Laravel queue worker;
+- `scheduler` — Laravel scheduler loop;
+- `parser` — Node.js Playwright parser microservice на `localhost:3000`;
+- `db` — MySQL 8.4, снаружи `127.0.0.1:3307`;
+- `redis` — Redis 7, снаружи `127.0.0.1:6380`;
+- `node` — Vite dev server на `localhost:5173`.
+
+Для зависимостей используются named volumes:
+
+- `vendor`;
+- `node_modules`;
+- `parser_node_modules`;
+- `db_data`.
+
+Это нужно, чтобы bind mount исходников не перекрывал зависимости, установленные внутри Docker image.
+
+## Важные команды
+
+Пересобрать и поднять проект:
+
+```bash
+docker compose up -d --build
+```
+
+Применить миграции и сид:
+
+```bash
+docker compose exec app php artisan migrate --seed
+```
+
+Полностью пересоздать таблицы локально:
+
+```bash
+docker compose exec app php artisan migrate:fresh --seed
+```
+
+Посмотреть контейнеры:
+
+```bash
+docker compose ps
+```
+
+Логи Laravel/очереди/parser-а:
+
+```bash
+docker compose logs -f app queue parser
+```
+
+Проверить parser health:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Остановить проект:
+
+```bash
+docker compose down
+```
+
+Остановить и удалить данные MySQL:
+
+```bash
+docker compose down -v
+```
+
+## Как работает основной поток
+
+1. Frontend отправляет `POST /api/organization` с `yandex_url`.
+2. Laravel валидирует ссылку через `StoreYandexOrganizationRequest` и `YandexMapsUrlValidator`.
+3. `YandexMapsUrlNormalizer` приводит ссылку к стабильному виду.
+4. `SaveYandexOrganizationAction` сохраняет или обновляет запись в `organizations`.
+5. В Redis-очередь отправляется `ParseYandexOrganizationJob`.
+6. Queue worker переводит организацию в `processing`.
+7. Laravel вызывает parser microservice `http://parser:3000/parse`.
+8. Parser открывает Яндекс.Карты в Chromium, переходит к отзывам, прокручивает список и собирает доступные отзывы.
+9. `PersistParsedOrganizationAction` сохраняет рейтинг, счетчики, отзывы и снимок истории.
+10. Frontend polling-ом обновляет статус и показывает данные без перезагрузки страницы.
+
+Контроллеры остаются тонкими: бизнес-логика лежит в `app/Actions`, parser wrappers в `app/Services/Yandex`, экспорт в `app/Services/Exports`.
+
+## Где сохраняются данные
+
+Основная БД: MySQL, database `yandex_reviews`.
+
+Подключение с хоста:
+
+```text
+host:     127.0.0.1
+port:     3307
+database: yandex_reviews
+user:     app
+password: password
+```
+
+Основные таблицы:
+
+- `users` — сид-пользователь.
+- `organizations` — ссылка, нормализованная ссылка, название, рейтинг, счетчики, статус parser-а, metadata parser-а, дата последнего парсинга.
+- `reviews` — автор, дата, текст, оценка, fingerprint, raw payload.
+- `rating_snapshots` — история рейтинга, количества оценок и количества отзывов.
+- `jobs` — очередь Laravel, если используется database queue.
+- `cache`, `sessions` — Laravel cache/session storage.
+
+Отзывы не парсятся заново при каждой смене страницы. Они кэшируются в БД, а UI берет страницы отзывов из Laravel API.
+
+## Экспорт данных
+
+После успешного парсинга в интерфейсе появляется блок `Экспорт данных`.
+
+Доступные форматы:
+
+- `CSV для Excel` — файл с UTF-8 BOM и разделителем `;`, удобно открывается в Excel/LibreOffice.
+- `JSON` — структурированные данные: организация, отзывы, история рейтинга.
+- `TXT` — простой текстовый отчет.
+
+API endpoint:
+
+```text
+GET /api/organizations/{id}/export?format=csv
+GET /api/organizations/{id}/export?format=json
+GET /api/organizations/{id}/export?format=txt
+```
+
+Endpoint защищен `auth:sanctum` и отдает данные только владельцу организации.
+
+## История рейтинга
+
+После каждого успешного парсинга создается запись в `rating_snapshots`.
+
+В интерфейсе показываются:
+
+- текущий рейтинг;
+- изменение рейтинга относительно предыдущего снимка;
+- текущее количество оценок и отзывов;
+- прирост оценок и отзывов;
+- график рейтинга;
+- столбцы прироста отзывов;
+- список последних снимков.
+
+Если рейтинг у организации не меняется, график будет ровным. Это нормальное состояние, поэтому UI дополнительно показывает текст `без изменений` и дельты по оценкам/отзывам.
+
+## API endpoints
+
+Публичный endpoint:
+
+```text
+POST /api/login
+```
+
+Защищенные Sanctum endpoints:
+
+```text
+POST /api/logout
+GET  /api/me
+
+GET  /api/organization
+POST /api/organization
+POST /api/organization/refresh
+GET  /api/organization/reviews?page=1&per_page=50
+
+GET  /api/organizations
+GET  /api/organizations/{id}
+POST /api/organizations/{id}/refresh
+GET  /api/organizations/{id}/reviews?page=1&per_page=50
+GET  /api/organizations/{id}/rating-history
+GET  /api/organizations/{id}/export?format=csv|json|txt
+
+GET  /api/parser-monitoring
+```
+
+## Как работает парсер
+
+Официального API для отзывов Яндекс.Карт нет, поэтому данные собираются через headless Chromium.
+
+Parser microservice:
+
+- находится в `parser/server.js`;
+- использует Playwright;
+- держит browser pool;
+- принимает задачи через HTTP;
+- хранит очередь в Redis;
+- возвращает JSON с организацией, рейтингом, счетчиками и отзывами.
+
+Логика извлечения:
+
+- `parser/parse-core.js` — orchestration, прокрутка, ожидания, нормализация;
+- `parser/extraction.js` — CSS/DOM selectors и извлечение данных;
+- `parser/browser-pool.js` — пул Chromium;
+- `parser/persistent-queue.js` — очередь parser-а.
+
+Parser открывает карточку, пытается попасть во вкладку отзывов, ищет внутренний scroll-контейнер, прокручивает его, раскрывает длинные тексты, нажимает `Показать еще`, если кнопка доступна, и продолжает до одного из условий:
+
+- достигнут `YANDEX_MAX_REVIEWS`;
+- несколько раундов подряд новые отзывы не появляются;
+- подходит timeout `YANDEX_PARSER_TIMEOUT`.
+
+Parser не использует аккаунты, внешние cookies, proxy rotation и не решает капчу. Если Яндекс показывает защиту, меняет DOM или ответ пустой, задача переводится в `failed`, а ошибка показывается в интерфейсе мониторинга.
+
+## Parser confidence и diagnostics
+
+Каждый parser result содержит metadata:
+
+- `contract_version`;
+- `strategy`;
+- `confidence`;
+- `warnings`;
+- `diagnostics`.
+
+Laravel сохраняет это в `organizations.parser_metadata` и `organizations.parser_confidence`.
+
+Если `confidence` ниже `YANDEX_MINIMUM_PARSER_CONFIDENCE`, результат считается небезопасным и организация переводится в `failed`. Это нужно, чтобы при изменении DOM Яндекса не сохранять мусорные данные как успешные.
+
+## Переменные окружения
+
+Главные переменные для Docker-сценария:
+
+```text
+APP_URL=http://localhost
+FRONTEND_URL=http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173
+SANCTUM_STATEFUL_DOMAINS=localhost,localhost:8080,localhost:5173,127.0.0.1,127.0.0.1:8080,127.0.0.1:5173
+
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=yandex_reviews
+DB_USERNAME=app
+DB_PASSWORD=password
+
 QUEUE_CONNECTION=redis
+REDIS_HOST=redis
+REDIS_PORT=6379
+
 YANDEX_MAX_REVIEWS=700
 YANDEX_PARSER_TIMEOUT=180
-YANDEX_PARSER_MODE=playwright
+YANDEX_MINIMUM_PARSER_CONFIDENCE=30
+YANDEX_PARSER_MODE=microservice
 YANDEX_PARSER_SERVICE_URL=http://parser:3000
-YANDEX_SCHEDULED_REFRESH="0 */6 * * *"
-YANDEX_ALERT_SCHEDULE="*/15 * * * *"
-YANDEX_ALERT_FAILURE_THRESHOLD=5
-YANDEX_ALERT_WINDOW_MINUTES=30
-YANDEX_ALERT_SLACK_WEBHOOK_URL=
-YANDEX_ALERT_TELEGRAM_BOT_TOKEN=
-YANDEX_ALERT_TELEGRAM_CHAT_ID=
+YANDEX_ALLOWED_HOSTS=yandex.ru,www.yandex.ru,yandex.kz,www.yandex.kz,yandex.com,www.yandex.com,yandex.by,www.yandex.by
+
 PARSER_PORT=3000
 PARSER_CONCURRENCY=2
 PARSER_BROWSER_POOL_SIZE=2
@@ -119,122 +339,43 @@ PARSER_SYNC_WAIT_MS=180000
 PARSER_QUEUE_DRIVER=redis
 PARSER_REDIS_URL=redis://redis:6379
 PARSER_REDIS_PREFIX=yandex-parser
-PARSER_QUEUE_FILE=/var/www/html/storage/parser-queue.json
-OTEL_EXPORTER_OTLP_ENDPOINT=
-OTEL_SERVICE_NAME=yandex-parser-service
-YANDEX_ALLOWED_HOSTS=yandex.ru,www.yandex.ru,yandex.kz,www.yandex.kz,yandex.com,www.yandex.com,yandex.by,www.yandex.by
-YANDEX_MINIMUM_PARSER_CONFIDENCE=30
 ```
 
-## API endpoints
+Для локальных unit/smoke-тестов без настоящего Яндекса можно использовать:
 
-- `POST /api/login`
-- `POST /api/logout`
-- `GET /api/me`
-- `GET /api/organization`
-- `POST /api/organization`
-- `POST /api/organization/refresh`
-- `GET /api/organization/reviews?page=1&per_page=50`
-- `GET /api/organizations`
-- `GET /api/organizations/{id}`
-- `POST /api/organizations/{id}/refresh`
-- `GET /api/organizations/{id}/reviews?page=1&per_page=50`
-- `GET /api/organizations/{id}/rating-history`
-- `GET /api/parser-monitoring`
+```text
+YANDEX_PARSER_MODE=fake
+```
 
-Все endpoints, кроме login, защищены `auth:sanctum`.
+## Ручной запуск без Docker
 
-## Как работает парсинг
+Docker является основным способом проверки. Ручной запуск нужен только для разработки.
 
-Laravel может вызвать `parser/yandex-parser.js` напрямую через Symfony Process или обратиться к отдельному Node parser microservice (`parser/server.js`). Режим выбирается через `YANDEX_PARSER_MODE`: `playwright`, `microservice` или `fake`.
+```bash
+cp .env.example .env
+composer install
+npm install
+npm --prefix parser install
+php artisan key:generate
+php artisan migrate --seed
+php artisan serve
+npm run dev
+php artisan queue:work --tries=3 --timeout=190
+```
 
-Скрипт запускает Chromium headless и открывает карточку с query-параметром `tab=reviews`, чтобы сразу попасть во вкладку отзывов. Если вкладка не открылась автоматически, parser пытается нажать “Отзывы” в интерфейсе.
+Для parser microservice отдельно:
 
-Отзывы на Яндекс.Картах подгружаются динамически не всей страницей, а внутренней прокручиваемой панелью. Поэтому parser ищет scroll-контейнер с отзывами, прокручивает его вниз, раскрывает длинные тексты через “Читать полностью”/“Показать полностью”, нажимает “Показать ещё”, если такая кнопка появилась, и продолжает до одного из условий:
+```bash
+npm --prefix parser run serve
+```
 
-- достигнут лимит `YANDEX_MAX_REVIEWS`;
-- несколько раундов подряд количество DOM-отзывов не растет;
-- подходит timeout `YANDEX_PARSER_TIMEOUT`.
+Для реального Playwright-парсинга без Docker нужно установить браузер:
 
-Средний рейтинг, число оценок и число отзывов извлекаются отдельно из текста и rating-блоков карточки. Счетчики поддерживают обычный формат и сокращения вроде `1,2 тыс.`. Относительные даты вроде `сегодня`, `вчера`, `3 дня назад`, `2 месяца назад` и русские календарные даты нормализуются в `YYYY-MM-DD`.
+```bash
+npx --prefix parser playwright install --with-deps chromium
+```
 
-Селекторы и UI-признаки extraction layer вынесены в `parser/extraction.js`, orchestration и нормализация — в `parser/parse-core.js`, чтобы адаптировать parser при изменениях DOM без переписывания HTTP-сервиса. Parser возвращает строго JSON в stdout, технические сообщения пишет в stderr.
-
-## Устойчивость parser-а и поддержка изменений Яндекса
-
-Parser contract версионирован через `parserContractVersion` в `parser/extraction.js`. Каждый результат содержит блок `parser`:
-
-- `contract_version` — версия DOM-контракта extraction layer.
-- `strategy` — текущая стратегия, например `dom_headless_scroll`.
-- `confidence` — оценка качества извлечения от 0 до 100.
-- `warnings` — признаки деградации, например `missing_rating`, `missing_reviews_count`, `low_review_text_coverage`.
-- `diagnostics` — selector hit-map, число найденных review nodes, длина body text, elapsed time.
-
-Laravel сохраняет `parser_confidence` и `parser_metadata` в `organizations`. Если `confidence` ниже `YANDEX_MINIMUM_PARSER_CONFIDENCE`, результат не считается успешным: job переводит организацию в `failed`, а metadata/warnings помогают понять, какая часть extraction layer сломалась.
-
-Это не делает парсер неуязвимым к антиботу или полной смене DOM, но превращает поломку из “тихо сохранились мусорные данные” в диагностируемый failed state с понятными сигналами для поддержки.
-
-## Parser microservice queue и browser pool
-
-`parser/server.js` держит browser pool и persistent очередь задач:
-
-- `PARSER_BROWSER_POOL_SIZE` — количество заранее поднятых Chromium browser instances.
-- `PARSER_BROWSER_MAX_TASKS` — recycle browser instance после N задач.
-- `PARSER_BROWSER_MAX_ERRORS` — recycle browser instance после N ошибок.
-- `PARSER_CONCURRENCY` — сколько задач можно выполнять одновременно.
-- `PARSER_MAX_QUEUE_SIZE` — максимальная длина очереди до ответа `429 PARSER_QUEUE_FULL`.
-- `PARSER_QUEUE_DRIVER=redis` включает Redis-backed очередь для multi-replica parser service.
-- `PARSER_QUEUE_DRIVER=file` использует JSON-файл `PARSER_QUEUE_FILE` для локального dev; `running` jobs после рестарта возвращаются в `queued`.
-- `PARSER_REDIS_URL` и `PARSER_REDIS_PREFIX` задают Redis connection/prefix.
-- `POST /parse` сохраняет job и ждёт результат до `PARSER_SYNC_WAIT_MS`.
-- `POST /jobs` ставит async job и возвращает `202 Location: /jobs/{id}`.
-- `GET /jobs/{id}` возвращает persisted status/result/error.
-- `GET /health` показывает `active`, `queued`, `completed`, `failed`, `rejected`, `concurrency`, `pool_size`, `recycled_browsers`.
-- `GET /metrics` отдаёт Prometheus exposition format: counters/gauges по jobs, queue depth, recycle count и average duration.
-- `OTEL_EXPORTER_OTLP_ENDPOINT` включает OpenTelemetry OTLP/HTTP trace export для каждого parser job.
-
-Prometheus alert rules лежат в `ops/prometheus/parser-alerts.yml`, Grafana dashboard — в `ops/grafana/yandex-parser-dashboard.json`.
-
-Это дешевле и стабильнее, чем запускать отдельный Chromium/Node process на каждый HTTP-запрос, и позволяет переживать рестарт parser service без потери очереди.
-
-Парсер не использует аккаунты, внешние cookies, proxy rotation и не пытается решать капчу. Если Яндекс показывает проверку, меняет разметку или данные недоступны, job переводит организацию в `failed` и сохраняет безопасное сообщение.
-
-## Почему используется кэширование в БД
-
-Отзывы не грузятся с Яндекса при каждой смене страницы. Сначала данные собираются и сохраняются в БД, затем frontend получает страницы отзывов из Laravel API. Это снижает нагрузку на Яндекс, ускоряет интерфейс и позволяет дедуплицировать повторные запуски parser-а.
-
-## Статусы парсинга
-
-- `pending` — задача поставлена в очередь.
-- `processing` — parser запущен.
-- `success` — данные успешно сохранены.
-- `failed` — parser завершился ошибкой или был заблокирован.
-
-## Плановое обновление и мониторинг
-
-Команда `php artisan yandex:refresh-organizations` ставит в очередь обновление сохраненных организаций, исключая уже `pending`/`processing`. Scheduler запускает ее по cron-выражению `YANDEX_SCHEDULED_REFRESH`, по умолчанию раз в 6 часов.
-
-Dashboard читает `/api/parser-monitoring`: показывает количество организаций в каждом статусе, последние ошибки parser-а и позволяет вручную отправить retry для конкретной организации.
-
-Команда `php artisan yandex:alert-parser-failures` проверяет число parser failures за окно `YANDEX_ALERT_WINDOW_MINUTES`. Если оно достигло `YANDEX_ALERT_FAILURE_THRESHOLD`, отправляется alert в Slack webhook и/или Telegram Bot API. Scheduler запускает команду по `YANDEX_ALERT_SCHEDULE`.
-
-## Ограничения парсинга Яндекс.Карт
-
-У Яндекса нет стабильного публичного API для получения всех отзывов карточки. Текущая реализация работает с динамической страницей и CSS/DOM-признаками, которые могут измениться. Антибот-защита может ограничить получение данных. Приложение не обходит капчу и не использует сомнительные способы обхода ограничений.
-
-Для production лучше вынести parser в отдельный сервис, добавить мониторинг, алерты, отдельные retry-политики и устойчивый extraction layer.
-
-## Безопасность
-
-- Пароль хранится через hash.
-- Login ограничен rate limiter-ом.
-- Sanctum настроен для SPA-cookie auth.
-- CORS поддерживает credentials только для frontend origin.
-- URL validation разрешает только HTTPS-ссылки Яндекс.Карт.
-- Frontend не использует `v-html` для отзывов.
-- Raw parser payload не отдается frontend-у.
-
-## Запуск тестов
+## Тесты
 
 ```bash
 php artisan test
@@ -247,50 +388,69 @@ node --check parser/browser-pool.js
 node --check parser/persistent-queue.js
 ```
 
-Текущее покрытие включает auth/API, несколько организаций, scoped reviews, rating history, parser monitoring, URL validation, DTO, fingerprint, fake parser persistence/deduplication, wrapper errors и базовые Vue-компоненты.
+Покрытие включает auth/API, несколько организаций, scoped reviews, pagination, rating history, parser monitoring, export, URL validation, DTO, fingerprint, fake parser persistence/deduplication, parser wrapper errors и базовые Vue-компоненты.
 
-## Линтинг и форматирование
+## Типичные проблемы
+
+### `Unauthenticated` после сохранения
+
+Обычно это старые cookies Sanctum после изменения доменов. Решение:
+
+1. Нажать `Выйти`.
+2. Обновить страницу.
+3. Войти снова.
+4. Если не помогло, очистить cookies для `localhost` или открыть инкогнито.
+
+### `localhost:8080` не открывается
+
+Проверить контейнеры:
 
 ```bash
-./vendor/bin/pint
+docker compose ps
+docker compose logs --tail=100 app nginx
 ```
 
-## Деплой
+### Парсер долго в `Ожидает`
 
-Минимальный deploy flow:
+Проверить queue и parser:
 
-1. Собрать PHP image и frontend assets.
-2. Настроить MySQL, Redis и queue worker.
-3. Настроить scheduler worker (`php artisan schedule:work` или cron `schedule:run` каждую минуту).
-4. Выполнить `php artisan migrate --force --seed`.
-5. Установить parser dependencies и Chromium, если используется `YANDEX_PARSER_MODE=playwright` или `microservice`.
-6. Для production предпочтительно включить `YANDEX_PARSER_MODE=microservice` и вынести Node parser в отдельный контейнер.
-7. Настроить `APP_URL`, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS`, HTTPS и monitoring queue worker-а.
+```bash
+docker compose logs -f queue parser
+curl http://localhost:3000/health
+```
 
-## CI/CD pipeline
+### Порты заняты
 
-В `.github/workflows/ci.yml` добавлен pipeline для push/PR:
-
-- Composer install и `php artisan test`.
-- npm install, `npm run test:frontend`, `npm run build`.
-- syntax check parser scripts.
-- blue-green deploy job на `main` после успешных checks: новый release собирается в `releases/{timestamp-sha}`, затем атомарно переключается `current`; при failed healthcheck выполняется rollback на предыдущий symlink.
-
-Для deploy job нужны GitHub Secrets:
+В текущем compose внешние порты:
 
 ```text
-PRODUCTION_SSH_KEY
-PRODUCTION_HOST
-PRODUCTION_USER
-PRODUCTION_PATH
-PRODUCTION_HEALTHCHECK_URL
-PRODUCTION_CANARY_COMMAND
-PRODUCTION_CANARY_HEALTHCHECK_URL
+8080 - приложение
+5173 - Vite
+3000 - parser
+3307 - MySQL
+6380 - Redis
 ```
 
-## Что бы я улучшил при наличии большего времени
+Если они заняты, поменять левую часть mapping в `docker-compose.yml`.
 
-- Redis-backed очередь parser-а вместо file-backed JSON для multi-replica parser service.
-- OpenTelemetry traces вокруг Laravel job и parser microservice.
-- Prometheus alert rules и Grafana dashboard.
-- Canary deploy перед blue-green switch.
+## Ограничения
+
+У Яндекс.Карт нет стабильного публичного API для получения всех отзывов карточки. Текущая реализация работает с динамической страницей и CSS/DOM-признаками, которые могут измениться. Антибот-защита может ограничить получение данных. Приложение не обходит капчу и не использует сомнительные способы обхода ограничений.
+
+Что я бы доработал при большем времени:
+
+- отдельный production parser service с observability;
+- proxy/region strategy в рамках легального использования;
+- richer retry policies;
+- полноценный `.xlsx` через отдельную библиотеку;
+- E2E-тесты браузером для всего сценария login -> parse -> export.
+
+## Безопасность
+
+- Пароль хранится через hash.
+- Login ограничен rate limiter-ом.
+- Sanctum настроен для SPA-cookie auth.
+- CORS поддерживает credentials только для разрешенных frontend origins.
+- URL validation разрешает только HTTPS-ссылки Яндекс.Карт.
+- Frontend не использует `v-html` для отзывов.
+- Raw parser payload не отдается frontend-у.

@@ -56,6 +56,7 @@ export function useOrganization() {
         try {
             organization.value = await organizationApi.saveOrganization(url);
             await loadAll();
+            return organization.value;
         } catch (exception) {
             error.value = exception.response?.data?.errors?.yandex_url?.[0] || exception.response?.data?.message || 'Не удалось сохранить ссылку.';
             throw exception;
@@ -70,6 +71,7 @@ export function useOrganization() {
         try {
             organization.value = await organizationApi.refreshOrganization(id);
             await loadAll();
+            return organization.value;
         } catch (exception) {
             error.value = exception.response?.data?.message || 'Не удалось запустить обновление.';
         } finally {

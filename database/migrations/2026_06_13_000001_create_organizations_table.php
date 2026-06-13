@@ -13,7 +13,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->text('yandex_url');
-            $table->text('normalized_yandex_url');
+            $table->string('normalized_yandex_url', 512);
             $table->string('yandex_business_id')->nullable()->index();
             $table->string('name')->nullable();
             $table->decimal('rating', 3, 2)->nullable();

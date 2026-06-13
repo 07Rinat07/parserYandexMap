@@ -216,6 +216,55 @@ class AuthAndOrganizationTest extends TestCase
             ->assertJsonPath('data.recent_errors.0.parsing_error', 'Blocked by Yandex.');
     }
 
+    public function test_user_can_export_organization_reviews_as_csv_and_json(): void
+    {
+        $user = $this->seedUser();
+        $organization = $this->organizationFor($user);
+        $organization->update([
+            'name' => 'Test Place',
+            'rating' => 4.8,
+            'ratings_count' => 120,
+            'reviews_count' => 80,
+            'last_parsed_at' => now(),
+        ]);
+        $organization->reviews()->create([
+            'fingerprint' => 'export-review',
+            'author_name' => 'Export Author',
+            'review_date' => '2026-06-10',
+            'text' => 'Export text',
+            'rating' => 5,
+        ]);
+        $organization->ratingSnapshots()->create([
+            'rating' => 4.8,
+            'ratings_count' => 120,
+            'reviews_count' => 80,
+            'captured_at' => now(),
+        ]);
+
+        $csv = $this->actingAs($user)->get("/api/organizations/{$organization->id}/export?format=csv");
+        $csv->assertOk();
+        $csv->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $this->assertStringContainsString('Export Author', $csv->streamedContent());
+
+        $json = $this->actingAs($user)->get("/api/organizations/{$organization->id}/export?format=json");
+        $json->assertOk();
+        $payload = json_decode($json->streamedContent(), true);
+
+        $this->assertSame('Test Place', $payload['organization']['name']);
+        $this->assertSame('Export text', $payload['reviews'][0]['text']);
+        $this->assertSame(4.8, $payload['rating_history'][0]['rating']);
+    }
+
+    public function test_user_cannot_export_foreign_organization(): void
+    {
+        $user = $this->seedUser();
+        $other = User::factory()->create();
+        $organization = $this->organizationFor($other);
+
+        $this->actingAs($user)->get("/api/organizations/{$organization->id}/export?format=csv")
+            ->assertNotFound();
+    }
+
     public function test_parser_error_marks_organization_as_failed(): void
     {
         $organization = $this->organizationFor($this->seedUser());

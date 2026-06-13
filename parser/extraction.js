@@ -22,8 +22,8 @@ export const fieldSelectorProfiles = {
     '[aria-label*="Рейтинг"]'
   ],
   author: [
-    '[class*="business-review-view__author"]',
     '[class*="business-review-view__author-name"]',
+    '[class*="business-review-view__author"]',
     '[class*="review-snippet-view__name"]',
     '[class*="author"]'
   ],

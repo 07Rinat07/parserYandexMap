@@ -35,3 +35,12 @@ export async function getParserMonitoring() {
     const { data } = await apiClient.get('/parser-monitoring');
     return data.data;
 }
+
+export async function exportOrganization(id, format) {
+    const response = await apiClient.get(`/organizations/${id}/export`, {
+        params: { format },
+        responseType: 'blob',
+    });
+
+    return response;
+}

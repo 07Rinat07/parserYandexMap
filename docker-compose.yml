@@ -1,9 +1,13 @@
 services:
   app:
     build: .
+    command: sh -c "mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache && chmod -R a+rwX storage bootstrap/cache && php-fpm"
     env_file: .env
     volumes:
       - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - node_modules:/var/www/html/node_modules
+      - parser_node_modules:/var/www/html/parser/node_modules
     depends_on:
       - db
       - redis
@@ -26,32 +30,39 @@ services:
       MYSQL_PASSWORD: password
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
 
   queue:
     build: .
-    command: php artisan queue:work --tries=3 --timeout=190
+    command: sh -c "mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache && chmod -R a+rwX storage bootstrap/cache && php artisan queue:work --tries=3 --timeout=190"
     env_file: .env
     volumes:
       - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - node_modules:/var/www/html/node_modules
+      - parser_node_modules:/var/www/html/parser/node_modules
     depends_on:
       - app
+      - parser
       - redis
       - db
 
   scheduler:
     build: .
-    command: sh -c "while true; do php artisan schedule:run --no-interaction; sleep 60; done"
+    command: sh -c "mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views bootstrap/cache && chmod -R a+rwX storage bootstrap/cache && while true; do php artisan schedule:run --no-interaction; sleep 60; done"
     env_file: .env
     volumes:
       - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - node_modules:/var/www/html/node_modules
+      - parser_node_modules:/var/www/html/parser/node_modules
     depends_on:
       - app
       - redis
@@ -66,6 +77,7 @@ services:
       - "3000:3000"
     volumes:
       - .:/var/www/html
+      - parser_node_modules:/var/www/html/parser/node_modules
     depends_on:
       - redis
 
@@ -77,6 +89,10 @@ services:
       - "5173:5173"
     volumes:
       - .:/var/www/html
+      - node_modules:/var/www/html/node_modules
 
 volumes:
   db_data:
+  vendor:
+  node_modules:
+  parser_node_modules:

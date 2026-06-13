@@ -183,8 +183,14 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
 
       function parseRating(value) {
         if (!value) return null;
-        const match = value.replace(',', '.').match(/([1-5](?:\.\d+)?)/);
-        return match ? Number(match[1]) : null;
+        const normalized = value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        const decimal = normalized.match(/([1-5])\s*[,.]\s*(\d)/);
+        if (decimal) {
+          return Number(`${decimal[1]}.${decimal[2]}`);
+        }
+
+        const integer = normalized.match(/(?:^|[^\d])([1-5])(?:[^\d]|$)/);
+        return integer ? Number(`${integer[1]}.0`) : null;
       }
 
       function extractReviewRating(node) {
@@ -215,13 +221,15 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
         .filter((node) => {
           const text = node.textContent?.trim() || '';
           return text.length > 20 && /зв|оцен|отзыв|читать|ещё|еще/i.test(text);
-        })
-        .slice(0, maxReviews);
+        });
 
       const title = textOf(document, fieldSelectorProfiles.title);
       const ratingText = textOf(document, fieldSelectorProfiles.rating);
 
-      const reviews = reviewNodes.map((node, index) => {
+      const reviews = [];
+      const seenReviews = new Set();
+
+      for (const [index, node] of reviewNodes.entries()) {
         const author = textOf(node, fieldSelectorProfiles.author);
         const date = textOf(node, fieldSelectorProfiles.reviewDate);
         const text = textOf(node, fieldSelectorProfiles.reviewText);
@@ -233,7 +241,7 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
           || node.id
           || `dom-${index}-${fingerprintText(author)}-${fingerprintText(date)}-${fingerprintText(text)}`;
 
-        return {
+        const review = {
           external_id: externalId,
           author_name: author,
           review_date: datetime ? datetime.slice(0, 10) : null,
@@ -242,7 +250,17 @@ export async function parseYandexOrganization({ browser, url, maxReviews = 700, 
           rating: extractReviewRating(node),
           raw_payload: { date_label: date }
         };
-      }).filter((review) => review.author_name || review.text);
+
+        const identity = [fingerprintText(author), fingerprintText(date), fingerprintText(text)].join('|');
+        if ((review.author_name || review.review_date_label || review.rating) && review.text && !seenReviews.has(identity)) {
+          seenReviews.add(identity);
+          reviews.push(review);
+        }
+
+        if (reviews.length >= maxReviews) {
+          break;
+        }
+      }
 
       const warnings = [];
       if (!title) warnings.push('missing_title');

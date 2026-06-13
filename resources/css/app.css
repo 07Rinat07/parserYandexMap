@@ -241,6 +241,17 @@ p {
     padding: 5px 9px;
 }
 
+.export-panel {
+    display: grid;
+    gap: 14px;
+}
+
+.export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .state {
     border-radius: 8px;
     padding: 14px;
@@ -351,6 +362,52 @@ p {
     font-size: 14px;
 }
 
+.history-stats {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 12px;
+}
+
+.history-stats div {
+    background: #f6f7f9;
+    border: 1px solid #e1e7ec;
+    border-radius: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+}
+
+.history-stats span,
+.history-stats small,
+.history-row small {
+    color: #677788;
+    font-size: 13px;
+}
+
+.history-stats strong {
+    font-size: 22px;
+}
+
+.history-row small {
+    display: inline-block;
+    margin-left: 6px;
+}
+
+.delta-positive {
+    color: #166534 !important;
+    font-weight: 800;
+}
+
+.delta-negative {
+    color: #991b1b !important;
+    font-weight: 800;
+}
+
+.delta-neutral {
+    color: #677788 !important;
+}
+
 .rating-chart {
     height: auto;
     margin-top: 12px;
@@ -369,6 +426,10 @@ p {
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 3;
+}
+
+.chart-line-muted {
+    opacity: .65;
 }
 
 .chart-point {
@@ -392,6 +453,15 @@ p {
     fill: #8a6116;
     font-size: 12px;
     font-weight: 700;
+}
+
+.chart-bar {
+    fill: #83c7a2;
+}
+
+.chart-empty-label {
+    fill: #677788;
+    font-size: 12px;
 }
 
 .review-item {
@@ -435,7 +505,8 @@ p {
     .topbar,
     .summary-header,
     .actions-row,
-    .input-row {
+    .input-row,
+    .export-actions {
         align-items: stretch;
         flex-direction: column;
     }
@@ -445,6 +516,7 @@ p {
     }
 
     .monitor-grid,
+    .history-stats,
     .history-row,
     .error-list article {
         grid-template-columns: 1fr;

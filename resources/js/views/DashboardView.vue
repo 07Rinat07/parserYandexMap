@@ -36,6 +36,11 @@
         <template v-if="organization">
             <OrganizationSummary :organization="organization" />
 
+            <OrganizationExport
+                :organization="organization"
+                :reviews-total="meta.total || organization.reviews_count || 0"
+            />
+
             <div class="actions-row">
                 <button type="button" :disabled="refreshing || isProcessing" @click="handleRefresh">
                     <RefreshCw :size="18" />
@@ -45,7 +50,7 @@
             </div>
 
             <ReviewsTable
-                v-if="organization.parsing_status === 'success'"
+                v-if="hasCollectedData"
                 :reviews="reviews"
                 :meta="meta"
                 :loading="reviewsLoading"
@@ -67,6 +72,7 @@ import ErrorState from '../components/ErrorState.vue';
 import LoadingState from '../components/LoadingState.vue';
 import OrganizationForm from '../components/OrganizationForm.vue';
 import OrganizationsList from '../components/OrganizationsList.vue';
+import OrganizationExport from '../components/OrganizationExport.vue';
 import OrganizationSummary from '../components/OrganizationSummary.vue';
 import ParserMonitoring from '../components/ParserMonitoring.vue';
 import RatingHistory from '../components/RatingHistory.vue';
@@ -98,6 +104,12 @@ const {
 const { reviews, meta, loading: reviewsLoading, error: reviewsError, load: loadReviews } = useReviews();
 
 const isProcessing = computed(() => ['pending', 'processing'].includes(organization.value?.parsing_status));
+const hasCollectedData = computed(() => Boolean(
+    organization.value?.last_parsed_at
+        || organization.value?.reviews_count
+        || organization.value?.ratings_count
+        || organization.value?.rating,
+));
 const polling = usePolling(async () => {
     if (organization.value?.id) {
         await select(organization.value.id);
@@ -111,10 +123,7 @@ const polling = usePolling(async () => {
 onMounted(async () => {
     await loadAll();
     await loadMonitoring();
-    if (organization.value?.parsing_status === 'success') {
-        await loadReviews(1, organization.value.id);
-        await loadHistory(organization.value.id);
-    }
+    await loadCollectedData();
 });
 
 watch(isProcessing, (value) => {
@@ -125,17 +134,24 @@ watch(isProcessing, (value) => {
     }
 }, { immediate: true });
 
-watch(() => organization.value?.parsing_status, async (status, previous) => {
-    if (status === 'success' && previous !== 'success') {
-        await loadReviews(1, organization.value.id);
-        await loadHistory(organization.value.id);
+watch(() => [
+    organization.value?.id,
+    organization.value?.parsing_status,
+    organization.value?.last_parsed_at,
+], async ([id]) => {
+    if (id && hasCollectedData.value) {
+        await loadCollectedData();
     }
 });
 
 async function handleSave(url) {
-    await save(url);
-    reviews.value = [];
-    meta.value = { current_page: 1, per_page: 50, total: 0, last_page: 1 };
+    const savedOrganization = await save(url);
+    if (hasCollectedData.value) {
+        await loadCollectedData(savedOrganization.id);
+    } else {
+        resetReviews();
+        ratingHistory.value = [];
+    }
     await loadMonitoring();
 }
 
@@ -151,12 +167,12 @@ async function handleRetry(id) {
 
 async function handleSelect(id) {
     await select(id);
-    reviews.value = [];
-    meta.value = { current_page: 1, per_page: 50, total: 0, last_page: 1 };
 
-    if (organization.value?.parsing_status === 'success') {
-        await loadReviews(1, organization.value.id);
-        await loadHistory(organization.value.id);
+    if (hasCollectedData.value) {
+        await loadCollectedData(organization.value.id);
+    } else {
+        resetReviews();
+        ratingHistory.value = [];
     }
 }
 
@@ -167,5 +183,19 @@ async function handlePageChange(page) {
 async function signOut() {
     await auth.logout();
     await router.push({ name: 'login' });
+}
+
+async function loadCollectedData(id = organization.value?.id) {
+    if (!id) {
+        return;
+    }
+
+    await loadReviews(meta.value.current_page || 1, id);
+    await loadHistory(id);
+}
+
+function resetReviews() {
+    reviews.value = [];
+    meta.value = { current_page: 1, per_page: 50, total: 0, last_page: 1 };
 }
 </script>
