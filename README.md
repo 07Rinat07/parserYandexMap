@@ -492,6 +492,29 @@ php artisan view:cache
 
 Queue и scheduler должны быть под process manager-ом: Docker Compose restart policy, Supervisor, systemd или аналог.
 
+GitHub Actions deploy job выключен по умолчанию, чтобы CI не падал в репозитории без настроенного production-хостинга. Чтобы включить deploy, нужно добавить repository variable:
+
+```text
+PRODUCTION_DEPLOY_ENABLED=true
+```
+
+И repository/environment secrets:
+
+```text
+PRODUCTION_SSH_KEY
+PRODUCTION_HOST
+PRODUCTION_USER
+PRODUCTION_PATH
+PRODUCTION_HEALTHCHECK_URL
+```
+
+Опционально:
+
+```text
+PRODUCTION_CANARY_COMMAND
+PRODUCTION_CANARY_HEALTHCHECK_URL
+```
+
 ## Типичные проблемы
 
 ### `Unauthenticated` после сохранения
