@@ -47,10 +47,9 @@ docker compose exec app php artisan migrate --seed
 
 Приложение будет доступно на `http://localhost:8080`. Vite dev server доступен на `http://localhost:5173`.
 
-Для реального Playwright parser-а внутри окружения нужно установить зависимости parser-а и Chromium:
+Docker image устанавливает Node-зависимости основного frontend и `parser/`. Для реального Playwright parser-а внутри окружения дополнительно нужно установить Chromium:
 
 ```bash
-docker compose exec app npm --prefix parser install
 docker compose exec app npm --prefix parser run install:browsers
 ```
 
@@ -104,7 +103,15 @@ YANDEX_ALLOWED_HOSTS=yandex.ru,www.yandex.ru,yandex.kz,www.yandex.kz,yandex.com,
 
 ## Как работает парсинг
 
-Laravel вызывает `parser/yandex-parser.js` через Symfony Process. Скрипт запускает Chromium headless, открывает карточку Яндекс.Карт, пытается перейти к отзывам, аккуратно прокручивает список до лимита `YANDEX_MAX_REVIEWS` и возвращает строго JSON в stdout. Технические сообщения пишутся в stderr.
+Laravel вызывает `parser/yandex-parser.js` через Symfony Process. Скрипт запускает Chromium headless и открывает карточку с query-параметром `tab=reviews`, чтобы сразу попасть во вкладку отзывов. Если вкладка не открылась автоматически, parser пытается нажать “Отзывы” в интерфейсе.
+
+Отзывы на Яндекс.Картах подгружаются динамически не всей страницей, а внутренней прокручиваемой панелью. Поэтому parser ищет scroll-контейнер с отзывами, прокручивает его вниз, раскрывает длинные тексты через “Читать полностью”/“Показать полностью”, нажимает “Показать ещё”, если такая кнопка появилась, и продолжает до одного из условий:
+
+- достигнут лимит `YANDEX_MAX_REVIEWS`;
+- несколько раундов подряд количество DOM-отзывов не растет;
+- подходит timeout `YANDEX_PARSER_TIMEOUT`.
+
+Средний рейтинг, число оценок и число отзывов извлекаются отдельно из текста и rating-блоков карточки. Счетчики поддерживают обычный формат и сокращения вроде `1,2 тыс.`. Parser возвращает строго JSON в stdout, технические сообщения пишет в stderr.
 
 Парсер не использует аккаунты, внешние cookies, proxy rotation и не пытается решать капчу. Если Яндекс показывает проверку, меняет разметку или данные недоступны, job переводит организацию в `failed` и сохраняет безопасное сообщение.
 
